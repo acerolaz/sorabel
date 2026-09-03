@@ -5,17 +5,16 @@
 `sorabel-idp` (service Keycloak conteneurisé, piloté par `docker compose`, pas par
 `make`).
 
-Chaque projet concerné a un `Makefile` à sa racine avec des cibles identiques dans leur
-nom (implémentation différente selon la stack) :
+Chaque projet concerné a un `Makefile` à sa racine avec des cibles **standardisées** : mêmes noms quand elles existent, mais certaines cibles peuvent être absentes selon les exceptions ci-dessous.
 
 | Cible | C# (`dotnet`) | Python |
 |---|---|---|
-| `make build` | `dotnet build` | `pip install -e .` / `poetry install` |
+| `make build` | `dotnet build` | `pip install -e .` / `poetry install` (voir exception) |
 | `make test` | `dotnet test` | `pytest` |
 | `make lint` | `dotnet format --verify-no-changes` | `ruff check .` |
-| `make docker-build` | `docker build -t <projet> .` | `docker build -t <projet> .` |
-| `make docker-up` | `docker compose up` | `docker compose up` |
-| `make docker-down` | `docker compose down` | `docker compose down` |
+| `make docker-build` | `docker build -t <projet> .` | — (voir exception) |
+| `make docker-up` | `docker compose up` | — (voir exception) |
+| `make docker-down` | `docker compose down` | — (voir exception) |
 | `make clean` | `dotnet clean` | suppression `__pycache__`, `.venv`, etc. |
 
 Le Makefile normalise les **noms de cibles**, pas l'implémentation : chaque projet garde
