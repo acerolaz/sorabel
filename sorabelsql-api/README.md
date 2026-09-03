@@ -1,4 +1,4 @@
-# tools-api
+# sorabelsql-api
 
 Text-to-SQL gouverné en lecture seule, tools figés (stock, commandes), masquage des colonnes sensibles selon le profil.
 

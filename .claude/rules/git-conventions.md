@@ -17,7 +17,7 @@
 | `docs` | Documentation uniquement |
 | `chore` | Tâches techniques (deps, config) |
 
-`<scope>` = nom du projet concerné (`rag-hybride`, `mcp`, `tools-api`, ...).
+`<scope>` = nom du projet concerné (`rag-hybride`, `mcp`, `sorabelsql-api`, ...).
 
 Exemples :
 ```

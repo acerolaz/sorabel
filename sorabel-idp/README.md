@@ -1,4 +1,4 @@
-# identity-provider
+# sorabel-idp
 
 Authentification et émission des JWT (claim `sorabel_profile`) pour l'ensemble de la gateway.
 

@@ -1,5 +1,5 @@
 ---
-applies_to: identity-provider, mcp, rag-hybride
+applies_to: sorabel-idp, mcp, rag-hybride
 ---
 
 # Architecture hexagonale (Python)

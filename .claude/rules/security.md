@@ -9,8 +9,8 @@
 
 ## Authentification / Autorisation
 
-- Toute API interne (sauf `identity-provider` lui-même) valide un JWT émis par Keycloak (claim `sorabel_profile`).
-- La matrice d'accès (profil × tool/endpoint × données) est **centralisée**, jamais dupliquée en dur dans plusieurs projets — cf. `authorization-gateway`.
+- Toute API interne (sauf `sorabel-idp` lui-même) valide un JWT émis par Keycloak (claim `sorabel_profile`).
+- La matrice d'accès (profil × tool/endpoint × données) est **centralisée**, jamais dupliquée en dur dans plusieurs projets — cf. `clients-api`.
 - Défense en profondeur : contrôle grossier à l'entrée (gateway) **et** contrôle fin dans chaque service (tables/colonnes réellement accessibles).
 
 ## Journalisation & audit

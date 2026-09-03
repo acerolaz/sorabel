@@ -1,6 +1,6 @@
 # mcp
 
-Serveur MCP unique : catalogue des tools (composite `answer_question` + briques), orchestration REST interne vers `rag-hybride` et `tools-api`.
+Serveur MCP unique : catalogue des tools (composite `answer_question` + briques), orchestration REST interne vers `rag-hybride` et `sorabelsql-api`.
 
 **Stack** : Python, architecture hexagonale
 **Exigences servies** : E4

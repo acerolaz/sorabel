@@ -1,4 +1,4 @@
-# authorization-gateway
+# clients-api
 
 Point d'entrée de la gateway : vérification JWT (JWKS), matrice d'accès centralisée, filtrage `list_tools`/`call_tool`, journalisation.
 
