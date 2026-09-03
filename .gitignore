@@ -9,7 +9,8 @@
 .claude/worktrees/
 
 # Secrets — jamais versionnés (cf. .claude/rules/security.md)
-.env
+.env*
+!.env.example
 
 # Environnements virtuels Python
 .venv/
@@ -22,6 +23,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+dist/
+build/
 
 # Couverture de tests
 .coverage

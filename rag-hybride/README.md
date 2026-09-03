@@ -208,17 +208,38 @@ Les briques internes (parseurs PDF, index vectoriel, moteur BM25, reranker) rest
 La base vectorielle tourne dans un conteneur ; le schéma n'est jamais créé à la main,
 uniquement par migration Alembic.
 
-```bash
-cd src && cp .env.example .env    # puis renseigner POSTGRES_PASSWORD
-docker compose up -d --wait postgres
-cd rag-hybride && alembic upgrade head    # initialise le schéma
-```
-
 Le `.env` est unique et vit à la racine de la solution (`src/`) : il est lu à la fois
 par `docker-compose.yml` et par `app/config.py`.
 
+```bash
+# depuis src/
+cp .env.example .env    # puis renseigner POSTGRES_PASSWORD et DATABASE_URL
+
+# depuis src/
+docker compose up -d --wait postgres
+
+# depuis src/rag-hybride/
+alembic upgrade head    # initialise le schéma
+```
+
+`POSTGRES_PASSWORD` (lu par `docker-compose.yml`) et le mot de passe intégré dans
+`DATABASE_URL` (lu par `app/config.py` et Alembic) doivent être renseignés de façon
+cohérente — `.env.example` fournit `DATABASE_URL` avec un mot de passe vide par défaut ;
+renseigner uniquement `POSTGRES_PASSWORD` fait démarrer un conteneur avec lequel
+l'application ne pourra pas s'authentifier.
+
+Si vous aviez déjà un `.env` dans `rag-hybride/`, déplacez-le à la racine de la solution
+(`mv rag-hybride/.env .env`) : seul le `.env` racine est désormais lu, un `.env` laissé
+dans `rag-hybride/` est ignoré.
+
 `--wait` s'appuie sur le `healthcheck` (`pg_isready`) du service : la commande ne rend
 la main que lorsque Postgres accepte réellement les connexions.
+
+> Cette réorganisation change le nom du volume Docker de la base : l'ancien volume
+> `rag-hybride_pgdata` est orphelin, un nouveau volume vide `sorabel_pgdata` le
+> remplace. Il faut donc recréer le schéma (`alembic upgrade head`) et réingérer le
+> corpus. L'ancien volume peut être supprimé une fois vérifié :
+> `docker volume rm rag-hybride_pgdata`.
 
 Faire évoluer le schéma :
 
