@@ -75,9 +75,9 @@ Makefile standardisées — voir `.claude/rules/makefile-conventions.md`.
 
 | Commande | Depuis |
 |---|---|
-| `pip install -e ".[dev]"` | `src/` |
-| `docker compose up -d --wait postgres` | `src/` |
-| `ruff check .` / `ruff format .` | `src/` (couvre tous les projets Python) |
+| `pip install -e ".[dev]"` | racine du dépôt |
+| `docker compose up -d --wait postgres` | racine du dépôt |
+| `ruff check .` / `ruff format .` | racine du dépôt (couvre tous les projets Python) |
 | `pytest` | le répertoire du projet Python (`cd rag-hybride`) |
 | `mypy app` | le répertoire du projet Python |
 | `alembic upgrade head` | le répertoire du projet Python |
