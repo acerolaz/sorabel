@@ -209,10 +209,13 @@ La base vectorielle tourne dans un conteneur ; le schéma n'est jamais créé à
 uniquement par migration Alembic.
 
 ```bash
-cp .env.example .env          # puis renseigner POSTGRES_PASSWORD
+cd src && cp .env.example .env    # puis renseigner POSTGRES_PASSWORD
 docker compose up -d --wait postgres
-alembic upgrade head          # initialise le schéma
+cd rag-hybride && alembic upgrade head    # initialise le schéma
 ```
+
+Le `.env` est unique et vit à la racine de la solution (`src/`) : il est lu à la fois
+par `docker-compose.yml` et par `app/config.py`.
 
 `--wait` s'appuie sur le `healthcheck` (`pg_isready`) du service : la commande ne rend
 la main que lorsque Postgres accepte réellement les connexions.

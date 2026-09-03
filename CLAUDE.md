@@ -58,6 +58,24 @@ flowchart LR
     AG -->|"⑤ résultat"| Client
 ```
 
+## Commandes
+
+Le répertoire d'exécution fait partie du contrat : l'outillage est mutualisé à la
+racine, mais chaque projet Python garde son propre paquet `app`.
+
+| Commande | Depuis |
+|---|---|
+| `pip install -e ".[dev]"` | `src/` |
+| `docker compose up -d --wait postgres` | `src/` |
+| `ruff check .` / `ruff format .` | `src/` (couvre tous les projets) |
+| `pytest` | le répertoire du projet (`cd rag-hybride`) |
+| `mypy app` | le répertoire du projet |
+| `alembic upgrade head` | le répertoire du projet |
+
+`pytest` et `mypy` s'exécutent projet par projet : les trois projets Python exposent
+tous un paquet de premier niveau `app`, qui entrerait en collision lors d'une
+exécution unique depuis la racine.
+
 ## Règles transverses
 
 @.claude/rules/git-conventions.md
