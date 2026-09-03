@@ -1,5 +1,5 @@
 [project]
-name = "rag-hybride"
+name = "sorabel"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -28,6 +28,18 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
 ]
+
+# Manifeste de dépendances uniquement : aucun paquet n'est installé.
+# Les trois projets Python exposent chacun un paquet `app` ; ils sont importés
+# depuis leur répertoire de travail, jamais installés. Sans `packages = []`,
+# l'auto-découverte setuptools installerait `app` ET `tests` dans
+# site-packages, où la copie périmée masquerait l'arbre de travail.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
