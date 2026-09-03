@@ -72,9 +72,14 @@ racine, mais chaque projet Python garde son propre paquet `app`.
 | `mypy app` | le répertoire du projet |
 | `alembic upgrade head` | le répertoire du projet |
 
-`pytest` et `mypy` s'exécutent projet par projet : les trois projets Python exposent
-tous un paquet de premier niveau `app`, qui entrerait en collision lors d'une
-exécution unique depuis la racine.
+`pytest` et `mypy` s'exécutent projet par projet, pour deux raisons distinctes :
+
+- **Aujourd'hui** : certains tests résolvent leurs fixtures par chemin relatif au
+  répertoire courant (`tests/eval/questions_rag.jsonl`) — lancés depuis la racine,
+  ils échouent.
+- **À terme** : `mcp` et `sorabel-idp` exposeront eux aussi un paquet de premier
+  niveau `app` ; une exécution unique depuis la racine se heurterait alors à une
+  collision de noms.
 
 ## Règles transverses
 
