@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(pytest*)",
+      "Bash(ruff*)",
+      "Bash(dotnet test*)",
+      "Bash(dotnet build*)",
+      "Bash(docker compose*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(rm -rf*)",
+      "Read(.env)",
+      "Read(**/secrets/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/dispatch-lint.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{"category": "reference_exacte", "question": "Quelle est la tension supportée par REF-8842 ?", "expected_product_ref": "REF-8842"}
+{"category": "reference_exacte", "question": "Donne les caractéristiques de REF-1001", "expected_product_ref": "REF-1001"}
+{"category": "reference_exacte", "question": "Spécifications techniques de REF-2200", "expected_product_ref": "REF-2200"}
+{"category": "reference_exacte", "question": "Dimensions du produit REF-3300", "expected_product_ref": "REF-3300"}
+{"category": "couverte", "question": "Comment procéder au retour d'un article défectueux ?", "expected_document_type": "procedure_sav"}
+{"category": "couverte", "question": "Quelle est la procédure de montage standard pour les appareils électriques ?", "expected_document_type": "manuel"}
+{"category": "couverte", "question": "Quelles sont les consignes de sécurité générales pour l'installation ?", "expected_document_type": "manuel"}
+{"category": "couverte", "question": "Comment contacter le service après-vente pour une réclamation ?", "expected_document_type": "procedure_sav"}
+{"category": "couverte", "question": "Quels types de produits sont couverts par la garantie standard ?", "expected_document_type": "datasheet"}
+{"category": "hors_corpus", "question": "Quelle est la météo prévue à Paris demain ?", "expected_refused": true}
+{"category": "hors_corpus", "question": "Quel est le cours actuel de l'action Sorabel en bourse ?", "expected_refused": true}
+{"category": "hors_corpus", "question": "Peux-tu me donner une recette de cuisine pour ce soir ?", "expected_refused": true}
+{"category": "hors_corpus", "question": "Quelle est la capitale de l'Australie ?", "expected_refused": true}

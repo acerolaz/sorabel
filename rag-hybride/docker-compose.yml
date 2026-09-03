@@ -1,0 +1,29 @@
+# Local development stack for rag-hybride.
+#
+# Postgres only: the application itself is run on the host
+# (`uvicorn app.main:app --reload`) until there is a Dockerfile to build.
+# A previous revision declared an `app` service with `build: .` while no
+# Dockerfile existed, which made `docker compose up` fail outright.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — copy .env.example to .env}
+      POSTGRES_DB: ${POSTGRES_DB:-rag_hybride}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Lets dependents wait on `condition: service_healthy` instead of
+      # racing the server's first-boot initialisation.
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag} -d ${POSTGRES_DB:-rag_hybride}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:
