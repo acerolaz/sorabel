@@ -167,20 +167,31 @@ flowchart LR
     C1(["💬 Bot Slack"]) --> MCP[["🖥️ Sorabel Data Gateway"]]
     C2(["🛠️ IDE dev"]) --> MCP
     C3(["🖥️ Poste vente"]) --> MCP
+
+    MCP --> T0(["🧩 answer_question<br/>(composite)"])
+    T0 -.orchestre.-> T1
+    T0 -.orchestre.-> T3
+    T0 -.orchestre.-> T5
+
     MCP --> T1(["🔎 search_documents"])
     MCP --> T2(["🎯 lookup_by_reference"])
     MCP --> T3(["📄 get_document_metadata"])
+    MCP --> T4(["📊 check_answer_confidence"])
+    MCP --> T5(["📚 list_document_types"])
 
     classDef client fill:#e8ecf1,stroke:#5b6b7d,stroke-width:1.5px,color:#2b3440
     classDef mcp fill:#dbe9f7,stroke:#2f6fa8,stroke-width:1.5px,color:#1b3c56
     classDef tool fill:#dff3e6,stroke:#3d9a5f,stroke-width:1.5px,color:#1f4d31
+    classDef composite fill:#1D4ED8,stroke:#1E3A8A,color:#fff,font-weight:bold
     class C1,C2,C3 client
     class MCP mcp
-    class T1,T2,T3 tool
+    class T0 composite
+    class T1,T2,T3,T4,T5 tool
 ```
 
 | Outil | Paramètres | Description | Exigence |
 |---|---|---|---|
+| `answer_question` | `query` | Composite : orchestre `search_documents` + `get_document_metadata` + `list_document_types`, retourne le résultat agrégé — aucune génération côté serveur | E1, E2, E6 |
 | `search_documents` | `query`, `top_k` | Recherche hybride en langage naturel | E1, E2, E6 |
 | `lookup_by_reference` | `product_ref` | Lookup exact par référence produit | E2 |
 | `get_document_metadata` | `doc_id` | Titre, version, date, statut (sans contenu) | E1 |
