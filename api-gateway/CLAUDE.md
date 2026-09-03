@@ -16,5 +16,5 @@ pour le détail du rôle et des flux relayés.
 ## Point d'attention
 
 `api-gateway` ne porte **aucune** logique d'autorisation — c'est la responsabilité de
-`mcp` en aval. Ce projet suppose qu'il relaie transparemment, sans jamais inspecter le
+`mcp` en aval. Ce projet suppose qu'il relaie de manière transparente, sans jamais inspecter le
 JWT ni la matrice d'accès.
