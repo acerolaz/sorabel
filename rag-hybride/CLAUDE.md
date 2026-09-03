@@ -34,5 +34,5 @@ Voir `.claude/commands/` : `/eval-retrieval`, `/new-endpoint`.
 ## Point d'attention
 
 `rag-hybride` ne fait **aucune** vérification de matrice d'accès (profil × collection) —
-c'est la responsabilité d'`authorization-gateway` en amont. Ce projet suppose que tout
+c'est la responsabilité de `clients-api` en amont. Ce projet suppose que tout
 appel qu'il reçoit est déjà autorisé.
