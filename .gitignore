@@ -1,0 +1,9 @@
+# Bruit macOS
+.DS_Store
+
+# Environnements de développement
+.idea/
+.vscode/
+
+# Worktrees Claude Code (locaux, jamais versionnés)
+.claude/worktrees/
