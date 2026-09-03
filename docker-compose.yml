@@ -1,9 +1,15 @@
-# Local development stack for rag-hybride.
+# Local development stack for the Sorabel solution.
 #
-# Postgres only: the application itself is run on the host
-# (`uvicorn app.main:app --reload`) until there is a Dockerfile to build.
-# A previous revision declared an `app` service with `build: .` while no
-# Dockerfile existed, which made `docker compose up` fail outright.
+# Postgres only: applications are run on the host
+# (`uvicorn app.main:app --reload`, from the project directory) until there is
+# a Dockerfile to build. A previous revision declared an `app` service with
+# `build: .` while no Dockerfile existed, which made `docker compose up` fail
+# outright.
+#
+# `name` is explicit: without it Compose derives the project name from this
+# file's directory (`src`), which would name the volume `src_pgdata`.
+name: sorabel
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
