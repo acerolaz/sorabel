@@ -7,3 +7,21 @@
 
 # Worktrees Claude Code (locaux, jamais versionnés)
 .claude/worktrees/
+
+# Secrets — jamais versionnés (cf. .claude/rules/security.md)
+.env
+
+# Environnements virtuels Python
+.venv/
+venv/
+
+# Caches Python et outillage
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Couverture de tests
+.coverage
+htmlcov/
