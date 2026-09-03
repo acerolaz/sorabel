@@ -1,5 +1,5 @@
 ---
-applies_to: sorabel-idp, mcp, rag-hybride
+applies_to: mcp, rag-hybride, text2sql-ai
 ---
 
 # Architecture hexagonale (Python)

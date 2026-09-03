@@ -11,11 +11,11 @@ Deux capacités métier composent la gateway :
 - **RAG documentaire hybride** (dense + BM25 + reranking) sur le corpus technique (fiches
   produit, manuels, procédures SAV) — porté par `rag-hybride`.
 - **Text-to-SQL gouverné** en lecture seule sur les données transactionnelles (stock,
-  commandes) — porté par `sorabelsql-api`.
+  commandes) — génération et exécution séparées entre `text2sql-ai` et `sorabelsql-api`.
 
-Le tout exposé via `mcp` (catalogue de tools), sécurisé par `sorabel-idp`
-(authentification, JWT) et `clients-api` (vérification, matrice d'accès,
-audit), avec `frontend` comme interface(s) cliente(s) restant à définir.
+Le tout exposé via `mcp` (catalogue de tools + matrice d'accès), sécurisé par `sorabel-idp`
+(Keycloak, authentification, JWT) et routé par `api-gateway` (hub de routage pur, sans
+logique d'autorisation), avec `frontend` comme interface(s) cliente(s) restant à définir.
 
 ## Exigences du cahier des charges (E1–E6)
 
@@ -32,52 +32,63 @@ audit), avec `frontend` comme interface(s) cliente(s) restant à définir.
 
 | Projet | Stack / archi | Rôle dans la gateway | Exigences servies |
 |---|---|---|---|
-| `sorabel-idp` | Python, hexagonale | Authentification, émission JWT (claim `sorabel_profile`) | — (support de E4/E5) |
-| `clients-api` | C#, clean architecture | Point d'entrée : vérification JWT (JWKS), matrice d'accès, filtrage `list_tools`/`call_tool`, journalisation | E4, E5 |
-| `mcp` | Python, hexagonale | Serveur MCP : catalogue des tools (composite `answer_question` + briques), orchestration vers `rag-hybride`/`sorabelsql-api` en REST interne | E4 |
+| `sorabel-idp` | Keycloak, conteneurisé | Authentification, émission JWT (claim `sorabel_profile`) — pas d'archi applicative custom, pas de Makefile | — (support de E4/E5) |
+| `api-gateway` | C#, clean architecture | Hub de routage pur (analogie YARP/Ocelot) : proxy vers `mcp`/`text2sql-ai`/`sorabelsql-api` — **aucune logique d'autorisation** (portée entièrement par `mcp`) | — (support de E4) |
+| `mcp` | Python, hexagonale | Serveur MCP : catalogue des tools (composite `answer_question` + briques), matrice d'accès (profil × tool × collections/tables), filtrage `list_tools`/`call_tool`, journalisation | E4, E5 |
 | `rag-hybride` | Python, hexagonale | Ingestion, hybrid retrieval (dense + BM25), reranking, citations systématiques | E1, E2, E6 |
-| `sorabelsql-api` | C#, clean architecture | Text-to-SQL gouverné, tools figés (stock, commandes), masquage colonnes | E3, E5 |
+| `text2sql-ai` | Python, hexagonale | Agent Text-to-SQL : **génération seule** de SQL lecture seule à partir du schéma commenté filtré par profil, n'exécute jamais | E3 |
+| `sorabelsql-api` | C# + PostgreSQL, clean architecture | **Exécution seule** du SQL (déjà généré ou fourni tel quel), chaîne de garde-fous, tools figés (stock, commandes), masquage colonnes | E3, E5 |
 | `frontend` | à déterminer | Interface(s) cliente(s) / administration | — |
 
-> Cartographie proposée à partir des documents de cadrage — à confirmer si la frontière
-> exacte Text-to-SQL (génération LLM) diffère entre `mcp` et `sorabelsql-api`.
+> Évolutions depuis la version précédente : `identity-provider` → `sorabel-idp` (bascule
+> Keycloak) ; `authorization-gateway` → `api-gateway` (recentré sur le routage pur, la
+> matrice d'accès reste côté `mcp`) ; `tools-api` supprimé et remplacé par
+> `sorabelsql-api` (exécution) ; `text2sql-ai` ajouté (génération). Cette séparation
+> génération/exécution donne au client un point d'inspection entre l'étape probabiliste
+> (LLM) et l'étape gouvernée (garde-fous).
 
 ## Flux global
 
+`api-gateway` est le **hub unique** de tous les flux, y compris les appels *internes*
+émis par `mcp` vers ses backends — il n'existe aucun lien direct `mcp` ↔ `rag-hybride` /
+`text2sql-ai` / `sorabelsql-api`.
+
 ```mermaid
 flowchart LR
-    Client(["Clients<br/>Slack / Poste vente / IDE"]) -->|"① auth"| IP["sorabel-idp<br/>(JWT + profil)"]
-    Client -->|"② list_tools / call_tool<br/>Bearer JWT"| AG["clients-api<br/>(vérif JWKS, matrice d'accès)"]
-    AG -->|"③ dispatch autorisé"| MCP["mcp<br/>(catalogue de tools)"]
-    AG -->|"refus"| Client
-    MCP -->|"REST interne"| RAG["rag-hybride<br/>(retrieval hybride)"]
-    MCP -->|"REST interne"| TA["sorabelsql-api<br/>(Text-to-SQL, tools figés)"]
-    RAG --> MCP
-    TA --> MCP
-    MCP -->|"④ résultat filtré"| AG
-    AG -->|"⑤ résultat"| Client
+    Client(["Clients<br/>Slack / Poste vente / IDE"]) <-->|"① auth<br/>② JWT + profil"| AG
+    Client <-->|"③ list_tools / call_tool<br/>Bearer JWT · ⑥ résultat"| AG["api-gateway<br/>(hub de routage pur, aucune autz)"]
+
+    AG <-.->|"relais transparent"| IDP["sorabel-idp<br/>(Keycloak, JWT + profil)"]
+    AG <-->|"③bis relais<br/>sans inspection RBAC · ⑥ résultat"| MCP["mcp<br/>(vérif JWT, matrice d'accès,<br/>catalogue de tools)"]
+
+    AG <-.->|"⑤ter search_documents<br/>et briques RAG"| RAG["rag-hybride<br/>(retrieval hybride)"]
+    AG <-.->|"⑤bis ask_database<br/>(génération)"| T2S["text2sql-ai<br/>(génération SQL seule)"]
+    AG <-.->|"⑤ run_sql_query<br/>+ tools figés"| SQLAPI["sorabelsql-api<br/>(exécution + garde-fous)"]
 ```
 
 ## Commandes
 
-Le répertoire d'exécution fait partie du contrat : l'outillage est mutualisé à la
-racine, mais chaque projet Python garde son propre paquet `app`.
+Le répertoire d'exécution fait partie du contrat : l'outillage Python est mutualisé à la
+racine (`mcp`, `text2sql-ai`, `rag-hybride`), mais chaque projet garde son propre paquet
+`app`. Les projets C# (`api-gateway`, `sorabelsql-api`) et Python suivent des cibles
+Makefile standardisées — voir `.claude/rules/makefile-conventions.md`.
 
 | Commande | Depuis |
 |---|---|
-| `pip install -e ".[dev]"` | `src/` |
-| `docker compose up -d --wait postgres` | `src/` |
-| `ruff check .` / `ruff format .` | `src/` (couvre tous les projets) |
-| `pytest` | le répertoire du projet (`cd rag-hybride`) |
-| `mypy app` | le répertoire du projet |
-| `alembic upgrade head` | le répertoire du projet |
+| `pip install -e ".[dev]"` | racine du dépôt |
+| `docker compose up -d --wait postgres` | racine du dépôt |
+| `ruff check .` / `ruff format .` | racine du dépôt (couvre tous les projets Python) |
+| `pytest` | le répertoire du projet Python (`cd rag-hybride`) |
+| `mypy app` | le répertoire du projet Python |
+| `alembic upgrade head` | le répertoire du projet Python |
+| `dotnet build` / `dotnet test` | le répertoire du projet C# |
 
 `pytest` et `mypy` s'exécutent projet par projet, pour deux raisons distinctes :
 
 - **Aujourd'hui** : certains tests résolvent leurs fixtures par chemin relatif au
   répertoire courant (`tests/eval/questions_rag.jsonl`) — lancés depuis la racine,
   ils échouent.
-- **À terme** : `mcp` et `sorabel-idp` exposeront eux aussi un paquet de premier
+- **À terme** : `mcp` et `text2sql-ai` exposeront eux aussi un paquet de premier
   niveau `app` ; une exécution unique depuis la racine se heurterait alors à une
   collision de noms.
 
@@ -86,18 +97,21 @@ racine, mais chaque projet Python garde son propre paquet `app`.
 @.claude/rules/git-conventions.md
 @.claude/rules/security.md
 @.claude/rules/api-contracts.md
+@.claude/rules/makefile-conventions.md
 
 ## Règles d'architecture par stack
 
-- Projets Python hexagonaux (`sorabel-idp`, `mcp`, `rag-hybride`) → @.claude/rules/python-hexagonal.md
-- Projets C# clean architecture (`clients-api`, `sorabelsql-api`) → @.claude/rules/csharp-clean-architecture.md
+- Projets Python hexagonaux (`mcp`, `rag-hybride`, `text2sql-ai`) → @.claude/rules/python-hexagonal.md
+- Projets C# clean architecture (`api-gateway`, `sorabelsql-api`) → @.claude/rules/csharp-clean-architecture.md
+- `sorabel-idp` n'hérite d'aucune règle d'architecture ni du Makefile standard (service Keycloak à configurer, pas une app développée en interne)
 
 ## Documentation de cadrage
 
 Les documents conceptuels détaillés (non importés automatiquement — volumineux, à
 consulter à la demande) :
-- `docs/architecture/MCP.md` — catalogue des tools, matrice d'accès, séquences auth
+- `docs/architecture/MCP.md` — catalogue des tools, matrice d'accès, séquences auth, séparation génération/exécution SQL
 - `docs/architecture/Text2SQL_Sorabel.md` — pipeline Text-to-SQL, garde-fous, golden dataset
 - `docs/architecture/Advanced_RAG.md` — ingestion, chunking, hybrid retrieval, évaluation
+- `docs/architecture/organisation-dossier-claude-sorabel.md` — organisation du dossier `.claude/` du monorepo (héritage, Makefiles, mutualisé vs local)
 
 Chaque projet a son propre `CLAUDE.md` pour le contexte métier local.
