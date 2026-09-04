@@ -48,6 +48,11 @@ asyncio_mode = "auto"
 markers = [
     "live: test optionnel nécessitant un backend réellement en écoute (sauté par défaut)",
 ]
+# Exclusion par défaut du marqueur `live`, déjà documentée ci-dessus (« sauté
+# par défaut ») et dans les briefs qui en dépendent : `-m live` en ligne de
+# commande reste l'opt-in explicite, `addopts` est le mécanisme qui manquait
+# pour honorer cette intention sans y toucher projet par projet.
+addopts = '-m "not live"'
 
 [tool.ruff]
 line-length = 100
