@@ -6,6 +6,7 @@ Transport `httpx` simulé (`httpx.MockTransport`), explicitement autorisé par
 la spec §11.1 pour ce niveau de test — aucun socket réel.
 """
 
+import json
 from collections.abc import Callable
 
 import httpx
@@ -158,11 +159,11 @@ async def test_les_briques_sans_endpoint_sont_deleguees_au_stub() -> None:
     # Act
     resultat = await client.search("tension", 3, ("manuel",), "corr")
 
-    # Assert — la provenance reste explicite
+    # Assert — la provenance reste explicite. La *valeur* de DELEGATED_TO_STUB
+    # n'est volontairement pas assertée ici : c'est un verrou de gouvernance,
+    # il appartient au test d'exhaustivité de la tâche 17 et n'a pas à être
+    # dupliqué mot pour mot dans deux fichiers.
     assert resultat["source"] == "stub"
-    assert RagHttpClient.DELEGATED_TO_STUB == frozenset(
-        {"search", "lookup", "document_metadata", "confidence", "document_types"}
-    )
 
 
 @pytest.mark.parametrize("methode", ["search", "lookup", "document_metadata", "confidence"])
@@ -199,3 +200,113 @@ async def test_document_types_est_delegue_au_stub() -> None:
 
     # Assert
     assert resultat["source"] == "stub"
+
+
+# --- corrections de la ronde 1/5 ------------------------------------------
+
+
+async def test_un_perimetre_vide_ne_declenche_aucun_appel_et_refuse() -> None:
+    """Zéro collection autorisée ne se rabat jamais sur le corpus entier.
+
+    Falsifiable : sans le garde, la requête partirait et le handler lèverait
+    `AssertionError` au lieu de `NotFoundInCorpusError`.
+    """
+
+    # Arrange — tout appel réseau est une erreur pour ce scénario
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("aucun appel réseau attendu sur un périmètre vide")
+
+    client = client_avec(handler)
+
+    # Act / Assert
+    with pytest.raises(NotFoundInCorpusError):
+        await client.answer("tension nominale ?", (), "corr")
+
+
+async def test_le_corps_emis_ne_porte_que_la_question() -> None:
+    """Déclencheur : le jour où `collections` sera transmis, ce test tombera.
+
+    `QueryRequest` de `rag-hybride` ne porte aucun champ de collections
+    (spec §14). Verrouiller la forme exacte du corps oblige à rouvrir ce test
+    — et donc à relire l'adapter — quand le contrat amont évoluera.
+    """
+    # Arrange
+    vus: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        vus.append(json.loads(request.content))
+        return httpx.Response(200, json={"citations": [], "confidence": 0.5})
+
+    client = client_avec(handler)
+
+    # Act
+    await client.answer("tension nominale ?", ("manuel",), "corr")
+
+    # Assert — égalité stricte, pas une appartenance
+    assert vus == [{"query": "tension nominale ?"}]
+
+
+async def test_une_url_de_base_malformee_devient_backend_unavailable() -> None:
+    """`httpx.InvalidURL` n'hérite pas de `HTTPError`.
+
+    Sans branche dédiée, l'exception sortirait nue jusqu'au client MCP.
+    """
+
+    # Arrange — port malformé, cas réaliste d'une variable d'environnement fautive
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("la construction du client doit échouer avant l'appel")
+
+    client = RagHttpClient(
+        "http://rag.test:8O00", timeout_s=5.0, transport=httpx.MockTransport(handler)
+    )
+
+    # Act / Assert
+    with pytest.raises(BackendUnavailableError):
+        await client.answer("tension ?", ("manuel",), "corr")
+
+
+async def test_un_200_non_json_devient_backend_unavailable() -> None:
+    """Une page HTML de proxy ne doit pas faire remonter une `JSONDecodeError` nue."""
+
+    # Arrange
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>proxy</html>")
+
+    client = client_avec(handler)
+
+    # Act / Assert
+    with pytest.raises(BackendUnavailableError):
+        await client.answer("tension ?", ("manuel",), "corr")
+
+
+async def test_un_200_json_non_objet_devient_backend_unavailable() -> None:
+    """Un tableau JSON ferait lever `AttributeError` sur `corps.get`."""
+
+    # Arrange
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=["pas", "un", "objet"])
+
+    client = client_avec(handler)
+
+    # Act / Assert
+    with pytest.raises(BackendUnavailableError):
+        await client.answer("tension ?", ("manuel",), "corr")
+
+
+async def test_un_404_sans_error_code_est_une_indisponibilite_pas_un_schema() -> None:
+    """Un statut nu ne signale rien (spec §7).
+
+    Un 404 de route inconnue est une erreur de configuration, pas un refus de
+    schéma : le classer en `SCHEMA_MISMATCH` enverrait l'exploitant sur une
+    fausse piste.
+    """
+
+    # Arrange
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="Not Found")
+
+    client = client_avec(handler)
+
+    # Act / Assert
+    with pytest.raises(BackendUnavailableError):
+        await client.answer("tension ?", ("manuel",), "corr")
