@@ -73,23 +73,17 @@ def build_local_verifier(settings: Settings) -> LocalKeyTokenVerifier:
     Deux garde-fous (spec §5) : l'adapter local ne doit jamais survivre à un
     déploiement hors `dev`, et un secret vide ne doit jamais démarrer
     silencieusement avec une clé de signature triviale.
+
+    Le garde-fou sur `MCP_JWT_ISSUER`/`MCP_JWT_AUDIENCE` vides, commun aux
+    deux adapters, vit dans `build_token_verifier` (tâche 8) — pas ici, pour
+    ne pas le dupliquer. `build_local_verifier` reste directement appelable
+    (tests, tâche 7) mais n'est jamais le seul rempart : la porte d'entrée
+    de production est `build_token_verifier`.
     """
     if settings.mcp_env != "dev":
         raise UnsafeVerifierConfiguration("MCP_TOKEN_VERIFIER=local est réservé à MCP_ENV=dev")
     if not settings.mcp_dev_jwt_secret:
         raise UnsafeVerifierConfiguration("MCP_DEV_JWT_SECRET est vide")
-    if not settings.mcp_jwt_issuer or not settings.mcp_jwt_audience:
-        # Non demandé explicitement par la spec §5 pour cet adapter, mais du
-        # même ordre que les deux garde-fous ci-dessus : fail-fast contre un
-        # `.env` tronqué qui démarrerait silencieusement avec un émetteur ou
-        # une audience vide, plutôt qu'un mode dégradé découvert plus tard.
-        # Ce n'est pas la fermeture d'une brèche de sécurité : une audience
-        # vide fait déjà lever `MissingRequiredClaimError` à PyJWT sur tout
-        # token (`_validate_aud`), et un émetteur vide exige toujours une
-        # signature valide. Le même garde a vocation à être hissé dans
-        # `build_token_verifier` (tâche 8), où il vaudra aussi pour l'adapter
-        # JWKS — `mcp_jwks_url` n'est pas couvert ici.
-        raise UnsafeVerifierConfiguration("MCP_JWT_ISSUER ou MCP_JWT_AUDIENCE est vide")
     return LocalKeyTokenVerifier(
         secret=settings.mcp_dev_jwt_secret,
         issuer=settings.mcp_jwt_issuer,
