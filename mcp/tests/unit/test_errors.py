@@ -1,6 +1,17 @@
 import json
 
-from app.domain.errors import ToolError, UnauthorizedToolError
+import pytest
+from app.domain.errors import (
+    BackendUnavailableError,
+    InvalidTokenError,
+    NotFoundInCorpusError,
+    SchemaMismatchError,
+    ToolError,
+    UnauthenticatedError,
+    UnauthorizedCollectionError,
+    UnauthorizedTableError,
+    UnauthorizedToolError,
+)
 
 
 def test_le_message_d_erreur_est_un_json_au_format_api_contracts():
@@ -39,3 +50,37 @@ def test_la_regle_de_matrice_est_portee_hors_du_json_client():
     assert error.matrix_rule == "support:get_stock"
     assert "matrix_rule" not in payload
     assert "support:get_stock" not in str(error)
+
+
+@pytest.mark.parametrize(
+    ("error_class", "expected_code"),
+    [
+        (UnauthenticatedError, "UNAUTHENTICATED"),
+        (UnauthorizedToolError, "UNAUTHORIZED_TOOL"),
+        (UnauthorizedCollectionError, "UNAUTHORIZED_COLLECTION"),
+        (UnauthorizedTableError, "UNAUTHORIZED_TABLE"),
+        (NotFoundInCorpusError, "NOT_FOUND_IN_CORPUS"),
+        (SchemaMismatchError, "SCHEMA_MISMATCH"),
+        (BackendUnavailableError, "BACKEND_UNAVAILABLE"),
+    ],
+)
+def test_chaque_sous_classe_rend_le_code_d_erreur_attendu(
+    error_class: type[ToolError], expected_code: str
+) -> None:
+    # Arrange
+    error = error_class(correlation_id="corr-x")
+
+    # Act
+    payload = json.loads(str(error))
+
+    # Assert
+    assert payload["error_code"] == expected_code
+    assert isinstance(error, ToolError)
+
+
+def test_invalid_token_error_est_une_exception_distincte_de_tool_error():
+    # Assert — InvalidTokenError (ruling C16) n'est pas rendu au client via
+    # CallToolResult : il n'hérite donc pas de ToolError et ne porte pas de
+    # corps JSON api-contracts.
+    assert issubclass(InvalidTokenError, Exception)
+    assert not issubclass(InvalidTokenError, ToolError)
