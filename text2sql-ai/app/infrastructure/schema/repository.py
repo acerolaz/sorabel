@@ -46,7 +46,15 @@ def load_business_rules(schema_dir: Path) -> dict[str, str]:
     path = schema_dir / "business_rules.yaml"
     if not path.exists():
         return {}
-    return cast(dict[str, str], yaml.safe_load(path.read_text())) or {}
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as exc:
+        raise SchemaLoadError(f"YAML illisible dans {path.name} : {exc}") from exc
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise SchemaLoadError(f"contenu invalide dans {path.name} : dict attendu")
+    return cast(dict[str, str], data)
 
 
 def load_few_shot_examples(schema_dir: Path) -> list[dict[str, str]]:
