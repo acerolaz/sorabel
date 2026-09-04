@@ -65,8 +65,8 @@ class GenerateSqlUseCase:
                     GenerationOutcome(
                         outcome=GenerationOutcomeType.REFUSED_OUT_OF_SCHEMA,
                         message=(
-                            "La donnée demandée n'est pas disponible dans le schéma "
-                            "accessible à ce profil."
+                            candidate.clarification_needed
+                            or "La donnée demandée n'est pas disponible dans le schéma accessible à ce profil."
                         ),
                         attempts=attempt,
                     ),
