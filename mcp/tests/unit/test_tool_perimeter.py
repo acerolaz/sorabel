@@ -31,7 +31,6 @@ from app.domain.catalog import CATALOG_BY_NAME
 from app.domain.errors import ToolError, UnauthenticatedError
 from app.domain.models import AuditEntry, Scope
 from app.infrastructure.audit.stdout_audit_log import StdoutAuditLog
-from mcp.server.fastmcp.exceptions import ToolError as SdkToolError
 
 from tests.harness import FakeAuditLog, FakeTokenVerifier, appel_http, entetes
 
@@ -285,13 +284,14 @@ async def test_une_demande_hors_perimetre_est_refusee_sans_atteindre_le_port(
 
     # Act
     with appel_http(entetes()):
-        with pytest.raises(SdkToolError) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool(tool, arguments | {"collections": ["finance"]})
 
-    # Assert — refus typé, port jamais atteint, refus journalisé (E5)
-    cause = capture.value.__cause__
-    assert isinstance(cause, ToolError)
-    corps = json.loads(str(cause))
+    # Assert — refus typé, port jamais atteint, refus journalisé (E5).
+    # C'est bien l'erreur **domaine** qui sort de `call_tool`, et non la
+    # `ToolError` du SDK qui l'enveloppait : `str()` est directement le corps
+    # du contrat, sans préfixe narratif (spec §7).
+    corps = json.loads(str(capture.value))
     assert corps["error_code"] == "UNAUTHORIZED_COLLECTION"
     assert set(corps) == {"error_code", "message", "correlation_id"}
     assert espion.appels == []

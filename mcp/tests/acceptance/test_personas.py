@@ -41,6 +41,26 @@ Gateway = Callable[[str | None], AbstractContextManager[GovernedFastMCP]]
 #: `tests/unit/test_answer_question_composite.py`, même convention).
 TEXTE_REDIGE = "La tension nominale de la REF-8842 est de 230 volts."
 
+#: Champs exacts d'une ligne de journal (spec §8, `AuditEntry`). Écrits ici en
+#: toutes lettres, jamais dérivés de la dataclasse : c'est justement l'ajout
+#: d'un champ — un résultat métier, interdit par `.claude/rules/security.md` —
+#: que cette liste doit faire échouer, et une dérivation l'accepterait sans rien
+#: dire. Le retrait d'un champ tombe ici tout autant.
+CHAMPS_JOURNAL = {
+    "timestamp",
+    "correlation_id",
+    "subject",
+    "profile",
+    "tool",
+    "arguments",
+    "decision",
+    "rule",
+    "backend",
+    "row_count",
+    "latency_ms",
+    "error_code",
+}
+
 
 def lignes_journal(journal: StringIO) -> list[dict[str, Any]]:
     return [json.loads(ligne) for ligne in journal.getvalue().strip().splitlines() if ligne]
@@ -95,11 +115,25 @@ async def test_bot_slack_support_ne_voit_que_ses_cinq_tools(
         ("get_customer_order_history", "deny"),
         ("get_stock", "allow"),
     ]
-    # E5 : chaque ligne porte l'identité et le profil de l'appelant — cesser de
-    # les journaliser, ou au contraire y ajouter un résultat métier (interdit
-    # par `.claude/rules/security.md`), passerait sinon inaperçu.
+    # E5 : chaque ligne porte l'identité et le profil de l'appelant…
     assert all(ligne["subject"] == "sujet-jeton-support" for ligne in lignes)
     assert all(ligne["profile"] == "support" for ligne in lignes)
+    # …et rien d'autre que les champs de la spec §8 : y ajouter un résultat
+    # métier (interdit par `.claude/rules/security.md`) fait tomber ceci.
+    assert all(set(ligne) == CHAMPS_JOURNAL for ligne in lignes)
+
+    # E5, spec §8 : `backend` et `row_count` sont renseignés sur un `call_tool`,
+    # pas seulement déclarés. `backend` vient du catalogue — il est donc connu
+    # même d'un appel refusé, et vaut `None` pour ce qui ne vise aucun service en
+    # aval (`list_tools`). `row_count` est la *seule* chose retenue du résultat :
+    # 1 ligne pour le stock rendu, et `None` — jamais un zéro fabriqué — pour un
+    # appel qui n'a rendu aucune ligne.
+    par_tool = {ligne["tool"]: ligne for ligne in lignes}
+    assert par_tool["get_stock"]["backend"] == "sqlapi"
+    assert par_tool["get_stock"]["row_count"] == 1
+    assert par_tool["get_customer_order_history"]["backend"] == "sqlapi"
+    assert par_tool["get_customer_order_history"]["row_count"] is None
+    assert par_tool["list_tools"]["backend"] is None
 
 
 async def test_poste_de_vente_recoit_des_citations_sans_texte_redige(

@@ -26,9 +26,10 @@ from typing import Any
 import httpx
 import jwt
 import uvicorn
-from app.api.context import current_identity
+from app.api.context import current_correlation_id, current_identity
 from app.api.governance import GovernedFastMCP
 from app.domain.access_matrix import AccessMatrix, ProfileEntry
+from app.domain.errors import NotFoundInCorpusError
 from app.domain.models import AuditEntry, Scope
 from app.infrastructure.keycloak.local_key_verifier import LocalKeyTokenVerifier
 from mcp.types import LATEST_PROTOCOL_VERSION
@@ -38,6 +39,16 @@ ISSUER = "https://idp.test/realms/sorabel"
 AUDIENCE = "sorabel-mcp"
 #: Tool réellement présent au catalogue — `decide` refuse tout nom hors catalogue.
 TOOL = "search_documents"
+
+#: Second tool du catalogue, dont la fonction échoue systématiquement : il sert à
+#: éprouver, sur le fil, une erreur levée **pendant** le dispatch — chemin
+#: distinct de celui de la barrière 1, et le seul que le SDK réenveloppe.
+TOOL_EN_ECHEC = "lookup_by_reference"
+
+#: Corrélation posée par le client sur l'appel en échec. Distincte de tout ce
+#: que le serveur ou le tool fabriquent : la retrouver dans le corps d'erreur
+#: prouve la reprise de l'en-tête, qu'une constante partagée ne prouverait pas.
+CORRELATION_CLIENT = "corr-du-client-42"
 
 
 class JournalEnMemoire:
@@ -60,11 +71,12 @@ def _matrice() -> AccessMatrix:
     portee = Scope(
         rag_collections=("datasheet",), sql_tables=("products",), masked_columns=("margin",)
     )
+    accordes = frozenset({TOOL, TOOL_EN_ECHEC})
     return AccessMatrix(
         version=1,
         profiles={
-            "sales": ProfileEntry(tools=frozenset({TOOL}), scope=portee),
-            "dev": ProfileEntry(tools=frozenset({TOOL}), scope=portee),
+            "sales": ProfileEntry(tools=accordes, scope=portee),
+            "dev": ProfileEntry(tools=accordes, scope=portee),
         },
     )
 
@@ -106,6 +118,16 @@ async def serveur_gouverne() -> AsyncIterator[tuple[str, JournalEnMemoire]]:
         """Rend le sujet que la gouvernance a reconnu pour *cet* appel."""
         identite = current_identity.get()
         return "<aucune identité>" if identite is None else identite.subject
+
+    @application.tool(name=TOOL_EN_ECHEC)
+    def hors_corpus() -> str:
+        """Échoue toujours : le corpus ne contient pas la réponse (E1).
+
+        Lève l'erreur domaine depuis la fonction du tool — donc *pendant* le
+        dispatch, là où le SDK la réenveloppe — avec la corrélation que la
+        barrière 1 a posée pour cet appel.
+        """
+        raise NotFoundInCorpusError(current_correlation_id.get())
 
     port = _port_libre()
     http = uvicorn.Server(
@@ -155,18 +177,27 @@ async def _ouvre_session(client: httpx.AsyncClient, url: str, token: str) -> str
 
 
 async def _appelle(
-    client: httpx.AsyncClient, url: str, *, token: str | None, session_id: str
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    token: str | None,
+    session_id: str,
+    nom: str = TOOL,
+    correlation: str | None = None,
 ) -> httpx.Response:
     """Appelle le tool en rejouant `session_id`, avec le token donné ou sans aucun."""
+    entetes = _entetes(token, session_id=session_id)
+    if correlation is not None:
+        entetes["X-Correlation-Id"] = correlation
     reponse = await client.post(
         url,
         json={
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": {"name": TOOL, "arguments": {}},
+            "params": {"name": nom, "arguments": {}},
         },
-        headers=_entetes(token, session_id=session_id),
+        headers=entetes,
     )
     reponse.raise_for_status()
     return reponse
@@ -245,6 +276,59 @@ async def test_une_session_rejouee_sans_token_est_refusee() -> None:
     assert all(entree.error_code == "UNAUTHENTICATED" for entree in refus)
 
 
+async def test_une_erreur_levee_pendant_le_dispatch_arrive_structuree_sur_le_fil() -> None:
+    """Les sept codes de la spec §7 atteignent le client sous la même forme.
+
+    `UNAUTHENTICATED` et `UNAUTHORIZED_TOOL` sont levés par la barrière 1, avant
+    tout dispatch, et remontent intacts au serveur bas niveau. Les cinq autres
+    — dont `NOT_FOUND_IN_CORPUS`, éprouvé ici — naissent *dans* la fonction du
+    tool et traversent `ToolManager.call_tool`, qui les réenveloppe dans la
+    `ToolError` du SDK préfixée de `"Error executing tool <nom>: "`. Sans la
+    reprise de `GovernedFastMCP.call_tool`, ce préfixe partirait sur le fil :
+    `isError` resterait vrai, mais le contenu ne serait plus parsable en JSON —
+    et le bot Slack recevrait, pour une question hors corpus, un texte anglais
+    qu'un LLM peut paraphraser en réponse (E1). C'est ce que ce test interdit,
+    au seul niveau où la réenveloppe est observable : le fil.
+    """
+    async with serveur_gouverne() as (url, journal):
+        # Arrange — une session valide, ouverte par un profil autorisé sur les
+        # deux tools : rien ici ne doit être refusé par la barrière 1.
+        async with httpx.AsyncClient(timeout=10) as client:
+            session_id = await _ouvre_session(client, url, _token("alice", "sales"))
+
+            # Act — le tool autorisé échoue dans sa propre fonction
+            reponse = await _appelle(
+                client,
+                url,
+                token=_token("alice", "sales"),
+                session_id=session_id,
+                nom=TOOL_EN_ECHEC,
+                correlation=CORRELATION_CLIENT,
+            )
+
+    # Assert — contenu strictement `{error_code, message, correlation_id}` et
+    # `isError` (les deux sont vérifiés par `_code_erreur`), jamais le préfixe
+    # narratif du SDK.
+    corps = _enveloppe(reponse.text)
+    assert "Error executing tool" not in reponse.text
+    assert _code_erreur(corps) == "NOT_FOUND_IN_CORPUS"
+
+    # Assert — la corrélation rendue est celle que *le client* a posée, reprise
+    # par la barrière 1 puis propagée jusqu'à la fonction du tool.
+    charge = json.loads(corps["result"]["content"][0]["text"])
+    assert charge["correlation_id"] == CORRELATION_CLIENT
+
+    # Assert — séquence d'audit réelle d'un `tools/call` : la ligne interne du
+    # SDK (validation de sortie sur cache miss) précède celle de l'appel client,
+    # qui reste `allow` — l'autorisation a bien été accordée — avec le vrai code
+    # d'erreur (E5). C'est la séquence qu'un appel direct à `serveur.call_tool()`
+    # ne produit pas (cf. spec §12, É10).
+    assert [(entree.tool, entree.decision, entree.error_code) for entree in journal.entrees] == [
+        ("list_tools:internal", "allow", None),
+        (TOOL_EN_ECHEC, "allow", "NOT_FOUND_IN_CORPUS"),
+    ]
+
+
 def _entetes(token: str | None, *, session_id: str | None = None) -> dict[str, str]:
     """En-têtes d'un appel JSON-RPC brut ; `token=None` n'en pose aucun."""
     entetes = {
@@ -280,12 +364,15 @@ def _texte_du_resultat(charge: str) -> str:
 def _code_erreur(enveloppe: dict[str, Any]) -> str:
     """Code d'erreur domaine porté par le corps `{error_code, message, correlation_id}`.
 
-    Un refus levé par la barrière 1 avant tout dispatch (comme `UNAUTHENTICATED`
-    ici) n'est jamais réenveloppé par le SDK : `str(exception)` — le JSON du
-    domaine (`ToolError.__str__`, spec §7) — atterrit tel quel dans le premier
-    bloc de contenu d'un `CallToolResult` marqué `isError`. On parse donc cette
-    enveloppe, on vérifie sa structure, plutôt que de chercher une sous-chaîne
-    dans le JSON brut (ce qui ne prouverait ni `isError`, ni la forme du corps).
+    Quelle que soit la barrière qui l'a levée, l'erreur domaine atteint le
+        serveur bas niveau du SDK intacte : la barrière 1 la lève avant tout
+        dispatch, et `GovernedFastMCP.call_tool` la relève telle quelle quand elle
+        naît pendant le dispatch (sans quoi le SDK la réenveloppe derrière un texte
+        narratif). `str(exception)` — le JSON du domaine (`ToolError.__str__`, spec
+        §7) — atterrit donc dans le premier bloc de contenu d'un `CallToolResult`
+        marqué `isError`. On parse cette enveloppe et on vérifie sa structure,
+        plutôt que de chercher une sous-chaîne dans le JSON brut (ce qui ne
+        prouverait ni `isError`, ni la forme du corps).
     """
     resultat = enveloppe["result"]
     assert resultat["isError"] is True, enveloppe

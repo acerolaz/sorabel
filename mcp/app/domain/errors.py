@@ -8,9 +8,20 @@ class InvalidTokenError(Exception):
 class ToolError(Exception):
     """Erreur rendue au client dans un CallToolResult `isError`.
 
-    Le SDK MCP transforme une exception levée pendant `call_tool` en résultat
-    `isError: true` dont le contenu est `str(exception)`. On y place donc
-    directement le corps d'erreur uniforme de `api-contracts.md`.
+    Le serveur bas niveau du SDK MCP transforme en résultat `isError: true`,
+    de contenu `str(exception)`, toute exception qui remonte **jusqu'à lui**.
+    On place donc dans `__str__` le corps d'erreur uniforme de
+    `api-contracts.md`, et rien d'autre.
+
+    Cette propriété ne tient toutefois que pour les erreurs qui l'atteignent
+    intactes. Une erreur levée *pendant* le dispatch d'un tool traverse
+    d'abord `ToolManager.call_tool`, qui la réenveloppe dans la `ToolError` du
+    SDK (`mcp.server.fastmcp.exceptions`) préfixée d'un texte narratif anglais
+    — `str()` cesse alors d'être parsable en JSON. C'est
+    `GovernedFastMCP.call_tool` qui rétablit le contrat, en relevant l'erreur
+    domaine (récupérée par `__cause__`) à la place de l'enveloppe du SDK :
+    sans cette reprise, seuls les refus de la barrière 1 respecteraient la
+    spec §7.
 
     `matrix_rule` (ruling C8) porte la règle de matrice appliquée lors de la
     décision d'autorisation qui a produit cette erreur. Il n'est **jamais**

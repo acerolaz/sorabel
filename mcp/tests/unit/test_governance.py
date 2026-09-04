@@ -334,14 +334,25 @@ async def test_la_regle_de_matrice_ne_fuit_jamais_vers_le_client(
 async def test_un_appel_autorise_qui_echoue_est_journalise(
     serveur: ServeurSousTest, audit: FakeAuditLog
 ) -> None:
-    # Arrange / Act — ce chemin passe par `super().call_tool()` : le SDK réenveloppe
-    # l'erreur du tool dans **sa propre** `ToolError` (`mcp.server.fastmcp.exceptions`),
-    # distincte de celle du domaine — c'est elle qui est réellement levée ici.
+    # Arrange / Act — ce chemin passe par `super().call_tool()`, où le SDK
+    # réenveloppe l'erreur du tool dans **sa propre** `ToolError`
+    # (`mcp.server.fastmcp.exceptions`), préfixée d'un texte narratif.
     with appel_http(_entetes("jeton-alice")):
-        with pytest.raises(SdkToolError):
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("get_order_status", {"order_id": "CMD-1"})
 
-    # Assert — l'échec est journalisé, l'erreur domaine récupérée via `__cause__`
+    # Assert — c'est l'erreur *domaine* qui ressort, récupérée par `__cause__`
+    # puis relevée telle quelle (spec §7) : `str()` est le corps du contrat, et
+    # non `"Error executing tool get_order_status: {...}"`, que le client ne
+    # saurait pas parser. Si la reprise de `call_tool` disparaissait, ce
+    # `pytest.raises(ToolError)` — l'erreur **domaine** — ne capturerait plus
+    # rien, la `SdkToolError` n'en héritant pas.
+    assert not isinstance(capture.value, SdkToolError)
+    corps = json.loads(str(capture.value))
+    assert set(corps) == {"error_code", "message", "correlation_id"}
+    assert corps["error_code"] == "NOT_FOUND_IN_CORPUS"
+
+    # Assert — l'échec reste journalisé avec le vrai code d'erreur (E5)
     (entree,) = audit.entrees
     assert (entree.decision, entree.error_code) == ("allow", "NOT_FOUND_IN_CORPUS")
     assert entree.rule == "matrix:support:get_order_status"

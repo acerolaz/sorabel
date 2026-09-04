@@ -12,8 +12,10 @@
 ne sont **pas** gouvernés : aujourd'hui sans effet puisque rien n'est enregistré
 sur ces primitives, mais la première ressource ou le premier prompt ajouté à ce
 serveur contournerait la matrice d'accès sans passer par la barrière 1.
-`tests/unit/test_governance.py::test_le_serveur_n_expose_ni_ressource_ni_prompt`
-sert de garde-fou de non-régression pour ce point.
+`tests/unit/test_exhaustivite.py::test_le_serveur_n_expose_ni_ressource_ni_prompt`
+sert de garde-fou de non-régression pour ce point : il porte sur le serveur
+assemblé par `build_server()`, seul endroit où une ressource ou un prompt
+risque réellement d'être ajouté.
 
 **Où l'identité est prise, et pourquoi.** Elle est rederivée à *chaque* appel,
 en vérifiant le token porté par la requête HTTP courante, atteinte via
@@ -45,6 +47,7 @@ from app.api.context import current_correlation_id, current_identity, current_sc
 from app.application.use_cases.authorize_tool_call import authorize_tool_call
 from app.application.use_cases.list_available_tools import list_available_tools
 from app.domain.access_matrix import RULE_UNAUTHENTICATED, AccessMatrix, projection_rule
+from app.domain.catalog import CATALOG_BY_NAME
 from app.domain.errors import InvalidTokenError, ToolError, UnauthenticatedError
 from app.domain.models import AuditEntry, Identity
 from app.domain.ports import AuditLogPort, TokenVerifierPort
@@ -76,21 +79,46 @@ def _matrix_rule(error: ToolError) -> str:
     return error.matrix_rule or ""
 
 
-def _error_code(exception: BaseException) -> str:
-    """Code d'erreur domaine d'un échec survenu *après* l'autorisation.
+def _domain_error(exception: BaseException) -> ToolError | None:
+    """Erreur domaine portée par un échec survenu *après* l'autorisation.
 
     Le SDK réenveloppe toute exception levée par un tool dans **sa** `ToolError`
     (`mcp.server.fastmcp.exceptions.ToolError`), sans rapport d'héritage avec
-    celle du domaine : `str(exception)` n'est alors pas le corps JSON attendu, et
-    l'erreur domaine n'est atteignable que par `__cause__`. On la récupère là,
-    pour que l'appel autorisé qui échoue soit journalisé avec son vrai code (E5).
+    celle du domaine, et préfixée d'un texte narratif anglais
+    (`Error executing tool <nom>: ...`, `tools/base.py`) : `str(exception)` n'est
+    alors plus le corps JSON du contrat, et l'erreur domaine n'est atteignable
+    que par `__cause__`. On la récupère là — pour la journaliser avec son vrai
+    code (E5), et pour la relever telle quelle vers le client (spec §7).
     """
     if isinstance(exception, ToolError):
-        return exception.error_code
+        return exception
     cause = exception.__cause__
-    if isinstance(cause, ToolError):
-        return cause.error_code
-    return ToolError.error_code
+    return cause if isinstance(cause, ToolError) else None
+
+
+def _error_code(exception: BaseException) -> str:
+    """Code d'erreur journalisé pour un échec de dispatch, jamais rendu vide."""
+    domaine = _domain_error(exception)
+    return ToolError.error_code if domaine is None else domaine.error_code
+
+
+def _row_count(resultat: Any) -> int | None:
+    """Nombre de lignes que le résultat **déclare**, jamais le résultat lui-même.
+
+    Seule cette métadonnée traverse la frontière de journalisation (spec §8,
+    `.claude/rules/security.md`) : rien d'autre du résultat n'est lu ni retenu.
+    `convert_result` du SDK rend un couple `(contenu, structuré)` dès qu'un
+    schéma de sortie est déclaré — c'est le second membre qui porte le dict du
+    tool. Un tool qui ne rend aucune ligne n'a pas de `row_count` : `None` est
+    alors la bonne valeur, jamais un zéro fabriqué qui se lirait « zéro ligne ».
+    """
+    if isinstance(resultat, tuple) and len(resultat) == 2:
+        resultat = resultat[1]
+    if not isinstance(resultat, dict):
+        return None
+    valeur = resultat.get("row_count")
+    # `bool` est un `int` en Python : `True` ne doit jamais devenir `row_count: 1`.
+    return valeur if isinstance(valeur, int) and not isinstance(valeur, bool) else None
 
 
 class GovernedFastMCP(FastMCP[Any]):
@@ -208,6 +236,7 @@ class GovernedFastMCP(FastMCP[Any]):
         except Exception as echec:
             # L'autorisation a été accordée : la décision journalisée reste
             # `allow`, complétée du code d'erreur domaine de l'échec.
+            domaine = _domain_error(echec)
             self._record(
                 name,
                 arguments,
@@ -218,14 +247,32 @@ class GovernedFastMCP(FastMCP[Any]):
                 allow=True,
                 error_code=_error_code(echec),
             )
-            raise
+            if domaine is None:
+                raise
+            # Spec §7 : le client reçoit un corps structuré, jamais un texte
+            # narratif. L'erreur domaine est donc relevée *telle quelle* — le
+            # serveur bas niveau du SDK en fait un `CallToolResult` `isError`
+            # dont l'unique bloc de contenu est `str(exception)`, soit
+            # exactement `{error_code, message, correlation_id}`. Laisser
+            # remonter la `ToolError` du SDK à sa place livrerait au client
+            # `"Error executing tool <nom>: {...}"` : non parsable en JSON, et
+            # paraphrasable par un LLM client. Le chemin est ainsi le même pour
+            # les sept codes, quelle que soit la barrière qui les lève.
+            raise domaine
         finally:
             current_scope.reset(jeton_portee)
             current_correlation_id.reset(jeton_correlation)
             current_identity.reset(jeton_identite)
 
         self._record(
-            name, arguments, identity, correlation_id, debut, rule=allowed.rule, allow=True
+            name,
+            arguments,
+            identity,
+            correlation_id,
+            debut,
+            rule=allowed.rule,
+            allow=True,
+            row_count=_row_count(resultat),
         )
         return resultat
 
@@ -292,9 +339,17 @@ class GovernedFastMCP(FastMCP[Any]):
         l'appel est autorisé, celle transportée par `ToolError.matrix_rule` quand
         il est refusé. Jamais le code d'erreur, qui a sa propre colonne.
 
+        `backend` est le service en aval que ce tool solliciterait, lu sur le
+        catalogue qui fait autorité (`ToolDescriptor.backend`) et non sur le
+        résultat : il est donc renseigné même quand l'appel est refusé avant
+        tout dispatch, et vaut `None` pour ce qui ne vise aucun backend
+        (`list_tools`, un nom hors catalogue).
+
         Seuls la requête et des métadonnées sont journalisés : le résultat ne
-        l'est jamais (`.claude/rules/security.md`).
+        l'est jamais (`.claude/rules/security.md`) — `row_count` est la seule
+        chose qu'on en retienne (spec §8).
         """
+        descripteur = CATALOG_BY_NAME.get(tool)
         self._audit.record(
             AuditEntry(
                 timestamp=datetime.now(timezone.utc),
@@ -305,6 +360,7 @@ class GovernedFastMCP(FastMCP[Any]):
                 arguments=arguments,
                 decision="allow" if allow else "deny",
                 rule=rule if error is None else _matrix_rule(error),
+                backend=None if descripteur is None else descripteur.backend,
                 row_count=row_count,
                 latency_ms=int((time.perf_counter() - debut) * 1000),
                 error_code=error.error_code if error is not None else error_code,
