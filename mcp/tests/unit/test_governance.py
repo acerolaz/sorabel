@@ -8,6 +8,7 @@ Seuls des ports sont doublés (`AuditLogPort`, `TokenVerifierPort`).
 
 import json
 import threading
+import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -17,8 +18,9 @@ import pytest
 from app.api.context import current_correlation_id, current_scope
 from app.api.governance import GovernedFastMCP
 from app.domain.access_matrix import AccessMatrix, ProfileEntry
-from app.domain.errors import InvalidTokenError, NotFoundInCorpusError
+from app.domain.errors import InvalidTokenError, NotFoundInCorpusError, ToolError
 from app.domain.models import AuditEntry, Identity, Scope
+from mcp.server.fastmcp.exceptions import ToolError as SdkToolError
 from mcp.server.lowlevel.server import request_ctx
 from mcp.shared.context import RequestContext
 from starlette.requests import Request
@@ -205,9 +207,24 @@ async def test_list_tools_est_vide_sans_authentification(
 
     # Assert — catalogue vide (spec §7.1) et événement journalisé
     assert outils == []
-    assert [(e.tool, e.decision, e.error_code) for e in audit.entrees] == [
-        ("list_tools", "deny", "UNAUTHENTICATED")
+    assert [(e.tool, e.decision, e.error_code, e.rule) for e in audit.entrees] == [
+        ("list_tools", "deny", "UNAUTHENTICATED", "fail_closed:unauthenticated")
     ]
+
+
+async def test_list_tools_autorise_est_journalise_avec_la_regle_et_le_row_count(
+    serveur: ServeurSousTest, audit: FakeAuditLog
+) -> None:
+    # Arrange / Act
+    with appel_http(_entetes("jeton-alice")):
+        outils = await serveur.list_tools()
+
+    # Assert — la projection est journalisée comme un appel autorisé (spec §7.1,
+    # §8) : si `list_tools` cessait de journaliser son succès, ceci tomberait.
+    (entree,) = audit.entrees
+    assert entree.decision == "allow"
+    assert entree.rule == "projection:support"
+    assert entree.row_count == len(outils) == 2
 
 
 async def test_list_tools_est_vide_hors_contexte_de_requete(
@@ -233,7 +250,7 @@ async def test_un_tool_autorise_est_bien_dispatche(serveur: ServeurSousTest) -> 
 async def test_un_tool_interdit_est_refuse_avant_tout_dispatch(serveur: ServeurSousTest) -> None:
     # Arrange / Act
     with appel_http(_entetes("jeton-alice")):
-        with pytest.raises(Exception) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("get_query_history", {"profile": "support"})
 
     # Assert — erreur typée, et la fonction du tool n'a jamais été atteinte
@@ -246,28 +263,35 @@ async def test_un_tool_inconnu_rend_le_meme_refus_qu_un_tool_interdit(
 ) -> None:
     # Arrange / Act
     with appel_http(_entetes("jeton-alice")):
-        with pytest.raises(Exception) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("tool_inexistant", {})
 
     # Assert — un refus ne confirme jamais l'existence d'une ressource
     assert json.loads(str(capture.value))["error_code"] == "UNAUTHORIZED_TOOL"
 
 
-async def test_un_appel_sans_token_est_refuse(serveur: ServeurSousTest) -> None:
+async def test_un_appel_sans_token_est_refuse(
+    serveur: ServeurSousTest, audit: FakeAuditLog
+) -> None:
     # Arrange / Act
     with appel_http(_entetes(token=None)):
-        with pytest.raises(Exception) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("get_stock", {"product_ref": "REF-8842"})
 
     # Assert
     assert json.loads(str(capture.value))["error_code"] == "UNAUTHENTICATED"
     assert serveur.dispatches == []
+    # …et la ligne d'audit porte la règle dédiée, pas une chaîne vide : si les
+    # trois levées d'`UnauthenticatedError` de `_authenticate` perdaient leur
+    # `matrix_rule`, `entree.rule` retomberait à `""`.
+    (entree,) = audit.entrees
+    assert entree.rule == "fail_closed:unauthenticated"
 
 
 async def test_un_token_invalide_est_refuse(serveur: ServeurSousTest) -> None:
     # Arrange / Act
     with appel_http(_entetes("jeton-inconnu")):
-        with pytest.raises(Exception) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("get_stock", {"product_ref": "REF-8842"})
 
     # Assert
@@ -277,7 +301,7 @@ async def test_un_token_invalide_est_refuse(serveur: ServeurSousTest) -> None:
 
 async def test_un_appel_hors_contexte_de_requete_est_refuse(serveur: ServeurSousTest) -> None:
     # Arrange / Act — aucun `request_ctx` posé : `request_context` lève
-    with pytest.raises(Exception) as capture:
+    with pytest.raises(ToolError) as capture:
         await serveur.call_tool("get_stock", {"product_ref": "REF-8842"})
 
     # Assert — refus typé, pas une `ValueError` du SDK qui remonterait telle quelle
@@ -292,7 +316,7 @@ async def test_l_identite_est_verifiee_a_chaque_appel(
     with appel_http(_entetes("jeton-alice")):
         await serveur.call_tool("get_stock", {"product_ref": "REF-1"})
     with appel_http(_entetes("jeton-mallory")):
-        with pytest.raises(Exception) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("get_stock", {"product_ref": "REF-2"})
 
     # Assert — le token du second appel a bien été vérifié et a décidé du refus
@@ -335,7 +359,7 @@ async def test_chaque_appel_est_journalise_autorise_comme_refuse(
     # Arrange / Act
     with appel_http(_entetes("jeton-alice")):
         await serveur.call_tool("get_stock", {"product_ref": "REF-8842"})
-        with pytest.raises(Exception):
+        with pytest.raises(ToolError):
             await serveur.call_tool("get_query_history", {"profile": "support"})
 
     # Assert
@@ -355,9 +379,9 @@ async def test_le_journal_porte_la_regle_de_matrice_et_non_le_code_d_erreur(
     # Arrange / Act
     with appel_http(_entetes("jeton-alice")):
         await serveur.call_tool("get_stock", {"product_ref": "REF-8842"})
-        with pytest.raises(Exception):
+        with pytest.raises(ToolError):
             await serveur.call_tool("get_query_history", {"profile": "support"})
-        with pytest.raises(Exception):
+        with pytest.raises(ToolError):
             await serveur.call_tool("tool_inexistant", {})
 
     # Assert — `rule` distingue les cas que le code d'erreur confond volontairement
@@ -374,7 +398,7 @@ async def test_la_regle_de_matrice_ne_fuit_jamais_vers_le_client(
 ) -> None:
     # Arrange / Act
     with appel_http(_entetes("jeton-alice")):
-        with pytest.raises(Exception) as capture:
+        with pytest.raises(ToolError) as capture:
             await serveur.call_tool("get_query_history", {"profile": "support"})
 
     # Assert — corps strictement `{error_code, message, correlation_id}`
@@ -386,9 +410,11 @@ async def test_la_regle_de_matrice_ne_fuit_jamais_vers_le_client(
 async def test_un_appel_autorise_qui_echoue_est_journalise(
     serveur: ServeurSousTest, audit: FakeAuditLog
 ) -> None:
-    # Arrange / Act — le SDK réenveloppe l'erreur du tool dans sa propre `ToolError`
+    # Arrange / Act — ce chemin passe par `super().call_tool()` : le SDK réenveloppe
+    # l'erreur du tool dans **sa propre** `ToolError` (`mcp.server.fastmcp.exceptions`),
+    # distincte de celle du domaine — c'est elle qui est réellement levée ici.
     with appel_http(_entetes("jeton-alice")):
-        with pytest.raises(Exception):
+        with pytest.raises(SdkToolError):
             await serveur.call_tool("get_order_status", {"order_id": "CMD-1"})
 
     # Assert — l'échec est journalisé, l'erreur domaine récupérée via `__cause__`
@@ -400,10 +426,35 @@ async def test_un_appel_autorise_qui_echoue_est_journalise(
 async def test_un_correlation_id_est_genere_sans_en_tete(
     serveur: ServeurSousTest, audit: FakeAuditLog
 ) -> None:
-    # Arrange / Act
+    # Arrange / Act — deux appels successifs, tous deux sans en-tête de corrélation
     with appel_http(_entetes("jeton-alice", correlation=None)):
-        await serveur.call_tool("get_stock", {"product_ref": "REF-8842"})
+        await serveur.call_tool("get_stock", {"product_ref": "REF-1"})
+    with appel_http(_entetes("jeton-alice", correlation=None)):
+        await serveur.call_tool("get_stock", {"product_ref": "REF-2"})
+
+    # Assert — un UUID valide (pas une constante en dur), différent à chaque appel :
+    # une implémentation qui renverrait toujours la même chaîne non vide tomberait ici.
+    premiere, seconde = (entree.correlation_id for entree in audit.entrees)
+    uuid.UUID(premiere)
+    uuid.UUID(seconde)
+    assert premiere != seconde
+
+
+async def test_le_serveur_n_expose_ni_ressource_ni_prompt(serveur: ServeurSousTest) -> None:
+    """Garde-fou de non-régression : `GovernedFastMCP` ne gouverne pas ces primitives.
+
+    Rien n'est enregistré aujourd'hui sur `ServeurSousTest`, donc ces listes sont
+    vides sans qu'aucune barrière n'intervienne. Le jour où une ressource ou un
+    prompt sera ajouté à ce serveur sans passer par la matrice d'accès, ce test
+    échouera et rappellera de gouverner ces points d'entrée (cf. docstring de
+    `GovernedFastMCP`).
+    """
+    # Arrange / Act
+    ressources = await serveur.list_resources()
+    modeles = await serveur.list_resource_templates()
+    prompts = await serveur.list_prompts()
 
     # Assert
-    (entree,) = audit.entrees
-    assert entree.correlation_id
+    assert ressources == []
+    assert modeles == []
+    assert prompts == []

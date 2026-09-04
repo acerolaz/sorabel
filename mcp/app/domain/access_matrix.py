@@ -4,6 +4,21 @@ from dataclasses import dataclass
 from app.domain.catalog import CATALOG_BY_NAME
 from app.domain.models import Allowed, Decision, Denied, Scope
 
+#: Refus antérieur à toute consultation de la matrice : le token porté par
+#: l'appel est absent, invalide ou expiré. Ce n'est pas une entrée de matrice,
+#: d'où le préfixe `fail_closed:` — voir la convention de `AccessMatrix`.
+RULE_UNAUTHENTICATED = "fail_closed:unauthenticated"
+
+
+def projection_rule(profile: str) -> str:
+    """Règle journalisée pour une projection de catalogue (`list_tools` autorisé).
+
+    Distincte de `matrix:{profile}:{tool}`, produit par `decide()` pour une
+    autorisation d'appel précise : une projection ne pointe aucun tool unique,
+    elle filtre le catalogue entier pour ce profil.
+    """
+    return f"projection:{profile}"
+
 
 @dataclass(frozen=True)
 class ProfileEntry:
@@ -28,7 +43,12 @@ class AccessMatrix:
     - Refus fail closed (défaut de sécurité, pas une entrée de matrice) :
       ``fail_closed:profile_missing`` (claim de profil absent),
       ``fail_closed:profile_unknown`` (profil non déclaré dans la matrice),
-      ``fail_closed:tool_unknown`` (tool hors du catalogue faisant autorité).
+      ``fail_closed:tool_unknown`` (tool hors du catalogue faisant autorité),
+      ``fail_closed:unauthenticated`` (`RULE_UNAUTHENTICATED` — token absent,
+      invalide ou expiré, antérieur à toute consultation de la matrice).
+    - Projection de catalogue (`list_tools` autorisé) : ``projection:{profile}``
+      (`projection_rule`) — distincte de `matrix:{profile}:{tool}`, qui pointe
+      un tool précis et non un filtrage du catalogue entier.
     """
 
     version: int

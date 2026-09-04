@@ -1,11 +1,6 @@
-from app.domain.access_matrix import AccessMatrix
+from app.domain.access_matrix import RULE_UNAUTHENTICATED, AccessMatrix
 from app.domain.errors import UnauthenticatedError, UnauthorizedToolError
 from app.domain.models import Allowed, Identity
-
-# Règle d'audit d'un refus antérieur à toute consultation de la matrice : le
-# token est absent, invalide ou expiré. Ce n'est pas une entrée de matrice, d'où
-# le préfixe `fail_closed:` (cf. `AccessMatrix`, ruling C8).
-RULE_UNAUTHENTICATED = "fail_closed:unauthenticated"
 
 
 def authorize_tool_call(
@@ -31,4 +26,7 @@ def authorize_tool_call(
     decision = matrix.decide(identity.profile, tool)
     if isinstance(decision, Allowed):
         return decision
+    # `decision.error_code` vaut aujourd'hui toujours `UNAUTHORIZED_TOOL` (cf.
+    # `AccessMatrix.decide`) : on lève le type dédié plutôt que de le consommer.
+    # À revisiter si `decide` se met un jour à distinguer plusieurs codes.
     raise UnauthorizedToolError(correlation_id, matrix_rule=decision.rule)

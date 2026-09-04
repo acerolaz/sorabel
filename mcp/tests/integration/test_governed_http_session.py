@@ -25,7 +25,6 @@ from typing import Any
 
 import httpx
 import jwt
-import pytest
 import uvicorn
 from app.api.context import current_identity
 from app.api.governance import GovernedFastMCP
@@ -122,7 +121,10 @@ async def serveur_gouverne() -> AsyncIterator[tuple[str, JournalEnMemoire]]:
         yield f"http://127.0.0.1:{port}/mcp", journal
     finally:
         http.should_exit = True
-        await tache
+        # Borné : un uvicorn qui ne rendrait pas la main bloquerait la suite du
+        # run indéfiniment plutôt que de faire échouer seulement ce test.
+        async with asyncio.timeout(10):
+            await tache
 
 
 async def _ouvre_session(client: httpx.AsyncClient, url: str, token: str) -> str:
@@ -190,9 +192,7 @@ async def test_une_session_rejouee_avec_un_autre_token_est_servie_sous_la_bonne_
                 client, url, token=_token("mallory", "dev"), session_id=session_id
             )
 
-    # Assert — la requête portait bien le token de mallory…
-    assert emprunt.request.headers["authorization"].startswith("Bearer ")
-    # …alice reste alice sur son propre appel…
+    # Assert — alice reste alice sur son propre appel…
     assert _texte_du_resultat(depart.text) == "alice"
     # …et mallory est servie comme mallory, jamais comme alice.
     assert _texte_du_resultat(emprunt.text) == "mallory"
@@ -209,11 +209,17 @@ async def test_une_session_rejouee_sans_token_est_refusee() -> None:
     Le refus doit être `UNAUTHENTICATED` et non un service silencieux sous
     l'identité initiale ; il doit aussi être journalisé (spec §7.1).
 
-    Note de comportement, constatée ici et non corrigée : le serveur bas niveau du
-    SDK appelle `list_tools()` pour valider la sortie d'un `tools/call`. Cet appel
-    interne traverse la barrière 1 comme un autre et produit **sa propre** entrée
-    d'audit. Un `call_tool` laisse donc deux lignes au journal, pas une. Le test
-    l'asserte tel quel plutôt que de le masquer — à arbitrer en revue.
+    Arbitrage rendu sur le comportement suivant, constaté en écrivant ce test :
+    le serveur bas niveau du SDK appelle `list_tools()` pour valider la sortie
+    d'un `tools/call`, sur cache miss de `_tool_cache` (global au processus).
+    Cet appel interne traverse la barrière 1 comme un autre et produit **sa
+    propre** entrée d'audit — un `call_tool` laisse donc deux lignes au journal,
+    pas une, mais seulement la première fois qu'un tool est appelé sur ce
+    serveur. On garde les deux lignes (une barrière qui cesserait de journaliser
+    certaines de ses décisions serait pire) mais on **marque** la ligne interne
+    (`GovernedFastMCP._marquer_call_tool`) : sans ce marqueur, la même action
+    cliente produirait une ou deux lignes indiscernables selon l'historique du
+    serveur — le pire résultat possible pour une preuve d'audit E5.
     """
     async with serveur_gouverne() as (url, journal):
         # Arrange
@@ -228,9 +234,13 @@ async def test_une_session_rejouee_sans_token_est_refusee() -> None:
     assert "alice" not in anonyme.text
     assert _code_erreur(corps) == "UNAUTHENTICATED"
 
-    # Assert — le refus est journalisé, sans identité (spec §7.1, E5)
+    # Assert — le refus est journalisé, sans identité (spec §7.1, E5), et la
+    # ligne interne au SDK est reconnaissable de celle du client : si le
+    # marquage disparaissait, `entree.tool` porterait deux fois `TOOL` (une
+    # levée par `_get_cached_tool_definition`, une par l'appel client) au lieu
+    # de `["list_tools:internal", TOOL]`.
     refus = [entree for entree in journal.entrees if entree.decision == "deny"]
-    assert [entree.tool for entree in refus] == ["list_tools", TOOL]
+    assert [entree.tool for entree in refus] == ["list_tools:internal", TOOL]
     assert all(entree.subject is None for entree in refus)
     assert all(entree.error_code == "UNAUTHENTICATED" for entree in refus)
 
@@ -268,13 +278,17 @@ def _texte_du_resultat(charge: str) -> str:
 
 
 def _code_erreur(enveloppe: dict[str, Any]) -> str:
-    """Code d'erreur domaine, que le SDK rende une erreur JSON-RPC ou un `isError`.
+    """Code d'erreur domaine porté par le corps `{error_code, message, correlation_id}`.
 
-    Le SDK réenveloppe l'exception du tool dans sa propre `ToolError` en préfixant
-    le message : le corps JSON du domaine est donc extrait de ce message.
+    Un refus levé par la barrière 1 avant tout dispatch (comme `UNAUTHENTICATED`
+    ici) n'est jamais réenveloppé par le SDK : `str(exception)` — le JSON du
+    domaine (`ToolError.__str__`, spec §7) — atterrit tel quel dans le premier
+    bloc de contenu d'un `CallToolResult` marqué `isError`. On parse donc cette
+    enveloppe, on vérifie sa structure, plutôt que de chercher une sous-chaîne
+    dans le JSON brut (ce qui ne prouverait ni `isError`, ni la forme du corps).
     """
-    brut = json.dumps(enveloppe)
-    debut = brut.find("UNAUTHENTICATED")
-    if debut == -1:
-        pytest.fail(f"aucun code d'erreur domaine dans la réponse : {brut}")
-    return "UNAUTHENTICATED"
+    resultat = enveloppe["result"]
+    assert resultat["isError"] is True, enveloppe
+    corps = json.loads(resultat["content"][0]["text"])
+    assert set(corps) == {"error_code", "message", "correlation_id"}, corps
+    return str(corps["error_code"])

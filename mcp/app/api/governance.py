@@ -7,6 +7,14 @@
 - `call_tool()` refuse en `UNAUTHENTICATED` ou `UNAUTHORIZED_TOOL` **avant**
   d'atteindre la fonction du tool.
 
+`list_resources`, `read_resource`, `list_prompts`, `get_prompt` et
+`list_resource_templates` — les autres points d'entrée hérités de `FastMCP` —
+ne sont **pas** gouvernés : aujourd'hui sans effet puisque rien n'est enregistré
+sur ces primitives, mais la première ressource ou le premier prompt ajouté à ce
+serveur contournerait la matrice d'accès sans passer par la barrière 1.
+`tests/unit/test_governance.py::test_le_serveur_n_expose_ni_ressource_ni_prompt`
+sert de garde-fou de non-régression pour ce point.
+
 **Où l'identité est prise, et pourquoi.** Elle est rederivée à *chaque* appel,
 en vérifiant le token porté par la requête HTTP courante, atteinte via
 `self.get_context().request_context.request`. Elle n'est jamais mémorisée pour
@@ -24,18 +32,19 @@ import asyncio
 import time
 import uuid
 from collections.abc import Sequence
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-from mcp.types import ContentBlock
+from mcp.types import CallToolRequest, ContentBlock, ServerResult
 from mcp.types import Tool as MCPTool
 from starlette.requests import Request
 
 from app.api.context import current_correlation_id, current_identity, current_scope
 from app.application.use_cases.authorize_tool_call import authorize_tool_call
 from app.application.use_cases.list_available_tools import list_available_tools
-from app.domain.access_matrix import AccessMatrix
+from app.domain.access_matrix import RULE_UNAUTHENTICATED, AccessMatrix, projection_rule
 from app.domain.errors import InvalidTokenError, ToolError, UnauthenticatedError
 from app.domain.models import AuditEntry, Identity
 from app.domain.ports import AuditLogPort, TokenVerifierPort
@@ -43,6 +52,23 @@ from app.domain.ports import AuditLogPort, TokenVerifierPort
 #: Nom sous lequel la projection du catalogue est journalisée (spec §7.1 : les
 #: appels `list_tools` sont journalisés au même titre que les `call_tool`).
 LIST_TOOLS = "list_tools"
+
+#: Suffixe distinguant, au journal, un `list_tools` déclenché par le SDK lui-même
+#: (validation interne de la sortie d'un `tools/call`, cf. `_marquer_call_tool`)
+#: d'un `list_tools` réellement demandé par le client.
+LIST_TOOLS_INTERNAL = f"{LIST_TOOLS}:internal"
+
+#: Code d'audit d'un appel autorisé interrompu par une annulation (déconnexion
+#: client, par exemple) plutôt que par une erreur du tool. Jamais rendu au
+#: client — `asyncio.CancelledError` est toujours re-levée telle quelle.
+CANCELLED_ERROR_CODE = "CANCELLED"
+
+# Marque, pour la durée du traitement bas niveau d'un `tools/call`, que tout
+# `list_tools()` déclenché pendant cette fenêtre est interne au SDK (cache miss
+# de validation de sortie) et non une requête `tools/list` du client — posé en
+# enveloppant le handler bas niveau plutôt que le corps de `call_tool` ci-dessous,
+# car le SDK résout ce cache *avant* d'invoquer `call_tool` (cf. `_marquer_call_tool`).
+_call_tool_en_cours: ContextVar[bool] = ContextVar("call_tool_en_cours", default=False)
 
 
 def _matrix_rule(error: ToolError) -> str:
@@ -82,29 +108,51 @@ class GovernedFastMCP(FastMCP[Any]):
         self._matrix = matrix
         self._audit = audit
         self._verifier = verifier
+        self._marquer_call_tool()
+
+    def _marquer_call_tool(self) -> None:
+        """Enveloppe le handler bas niveau de `tools/call` pour poser `_call_tool_en_cours`.
+
+        Le serveur bas niveau du SDK résout `_get_cached_tool_definition()` — qui
+        appelle `list_tools()` sur cache miss (`_tool_cache`, global au processus)
+        — **avant** d'invoquer `call_tool()` (`lowlevel/server.py:531`). Poser le
+        marqueur dans le corps de `call_tool()` ci-dessous arriverait donc trop
+        tard pour ce cas ; il doit couvrir tout le traitement du `tools/call`.
+        """
+        original = self._mcp_server.request_handlers[CallToolRequest]
+
+        async def avec_marqueur(requete: CallToolRequest) -> ServerResult:
+            jeton = _call_tool_en_cours.set(True)
+            try:
+                return await original(requete)
+            finally:
+                _call_tool_en_cours.reset(jeton)
+
+        self._mcp_server.request_handlers[CallToolRequest] = avec_marqueur
 
     async def list_tools(self) -> list[MCPTool]:
         """Catalogue projeté sur le profil appelant — vide sans token valide."""
         requete = self._current_request()
         correlation_id = self._correlation_id(requete)
         debut = time.perf_counter()
+        nom = LIST_TOOLS_INTERNAL if _call_tool_en_cours.get() else LIST_TOOLS
 
         try:
             identity = await self._authenticate(requete, correlation_id)
         except ToolError as refus:
-            self._record(LIST_TOOLS, {}, None, correlation_id, debut, error=refus)
+            self._record(nom, {}, None, correlation_id, debut, error=refus)
             return []
 
         projection = list_available_tools(
             self._matrix, identity, await super().list_tools(), lambda outil: outil.name
         )
         self._record(
-            LIST_TOOLS,
+            nom,
             {},
             identity,
             correlation_id,
             debut,
-            rule=f"matrix:{identity.profile}:projection",
+            rule=projection_rule(identity.profile),
             allow=True,
             row_count=len(projection),
         )
@@ -131,6 +179,23 @@ class GovernedFastMCP(FastMCP[Any]):
         jeton_portee = current_scope.set(allowed.scope)
         try:
             resultat = await super().call_tool(name, arguments)
+        except asyncio.CancelledError:
+            # `CancelledError` hérite de `BaseException` (Python 3.8+), donc pas
+            # de `except Exception` ci-dessous : sans cette clause dédiée, un
+            # appel autorisé interrompu par une déconnexion ne laisserait aucune
+            # trace au journal. L'annulation n'est jamais avalée : elle est
+            # toujours re-levée telle quelle.
+            self._record(
+                name,
+                arguments,
+                identity,
+                correlation_id,
+                debut,
+                rule=allowed.rule,
+                allow=True,
+                error_code=CANCELLED_ERROR_CODE,
+            )
+            raise
         except Exception as echec:
             # L'autorisation a été accordée : la décision journalisée reste
             # `allow`, complétée du code d'erreur domaine de l'échec.
@@ -185,16 +250,18 @@ class GovernedFastMCP(FastMCP[Any]):
         d'événements.
         """
         if requete is None:
-            raise UnauthenticatedError(correlation_id)
+            raise UnauthenticatedError(correlation_id, matrix_rule=RULE_UNAUTHENTICATED)
 
         schema, _, token = requete.headers.get("authorization", "").partition(" ")
         if schema.lower() != "bearer" or not token.strip():
-            raise UnauthenticatedError(correlation_id)
+            raise UnauthenticatedError(correlation_id, matrix_rule=RULE_UNAUTHENTICATED)
 
         try:
             return await asyncio.to_thread(self._verifier.verify, token.strip())
         except InvalidTokenError as invalide:
-            raise UnauthenticatedError(correlation_id) from invalide
+            raise UnauthenticatedError(
+                correlation_id, matrix_rule=RULE_UNAUTHENTICATED
+            ) from invalide
 
     def _record(
         self,
