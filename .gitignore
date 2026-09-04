@@ -29,3 +29,6 @@ build/
 # Couverture de tests
 .coverage
 htmlcov/
+
+# Espace de travail Superpowers SDD (local, jamais versionné)
+.superpowers/
