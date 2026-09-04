@@ -1,11 +1,10 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim
 
 WORKDIR /solution
 
 COPY pyproject.toml ./
-COPY text2sql-ai ./text2sql-ai
-
 RUN pip install --no-cache-dir -e ".[dev]"
+COPY text2sql-ai ./text2sql-ai
 
 WORKDIR /solution/text2sql-ai
 
