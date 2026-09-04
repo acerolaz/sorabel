@@ -158,6 +158,15 @@ class GovernedFastMCP(FastMCP[Any]):
         )
         return projection
 
+    async def list_all_tools(self) -> list[MCPTool]:
+        """Catalogue complet, **sans filtrage** — usage interne et tests d'exhaustivité.
+
+        Jamais exposé au protocole : `list_tools()` reste le seul point d'entrée
+        du client, et il projette. Cette méthode sert à vérifier que le registre
+        contient bien les 13 tools du catalogue, indépendamment de tout profil.
+        """
+        return await super().list_tools()
+
     async def call_tool(
         self, name: str, arguments: dict[str, Any]
     ) -> Sequence[ContentBlock] | dict[str, Any]:
