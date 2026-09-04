@@ -3,62 +3,29 @@
 Ces tests pilotent `GovernedFastMCP` en posant le contexte de requête du SDK
 (`request_ctx`) exactement comme le fait le serveur bas niveau : l'identité doit
 donc être dérivée de l'en-tête `Authorization` de *cette* requête, à chaque appel.
-Seuls des ports sont doublés (`AuditLogPort`, `TokenVerifierPort`).
+Seuls des ports sont doublés (`AuditLogPort`, `TokenVerifierPort`) — par les
+doubles de `tests/unit/harness.py`, unique copie du harnais.
 """
 
 import asyncio
 import json
 import threading
 import uuid
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from app.api.context import current_correlation_id, current_scope
 from app.api.governance import GovernedFastMCP
 from app.domain.access_matrix import AccessMatrix, ProfileEntry
-from app.domain.errors import InvalidTokenError, NotFoundInCorpusError, ToolError
-from app.domain.models import AuditEntry, Identity, Scope
+from app.domain.errors import NotFoundInCorpusError, ToolError
+from app.domain.models import Scope
 from mcp.server.fastmcp.exceptions import ToolError as SdkToolError
-from mcp.server.lowlevel.server import request_ctx
-from mcp.shared.context import RequestContext
-from starlette.requests import Request
+
+from tests.unit.harness import CORRELATION, FakeAuditLog, FakeTokenVerifier, appel_http
+from tests.unit.harness import entetes as _entetes
 
 PORTEE_SUPPORT = Scope(("manuels",), ("stock",), ("marge",))
 PORTEE_VENDEUR = Scope(("fiches",), ("commandes",), ())
-
-
-class FakeAuditLog:
-    """Double du port `AuditLogPort` — conserve les entrées en mémoire."""
-
-    def __init__(self) -> None:
-        self.entrees: list[AuditEntry] = []
-
-    def record(self, entry: AuditEntry) -> None:
-        self.entrees.append(entry)
-
-
-class FakeTokenVerifier:
-    """Double du port `TokenVerifierPort` — table jeton → profil."""
-
-    def __init__(self, profils: Mapping[str, str]) -> None:
-        self._profils = profils
-        self.jetons_vus: list[str] = []
-        self.fils_d_execution: list[str] = []
-
-    def verify(self, token: str) -> Identity:
-        self.jetons_vus.append(token)
-        self.fils_d_execution.append(threading.current_thread().name)
-        profil = self._profils.get(token)
-        if profil is None:
-            raise InvalidTokenError("jeton inconnu")
-        return Identity(
-            subject=f"sujet-{token}",
-            profile=profil,
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        )
 
 
 class ServeurSousTest(GovernedFastMCP):
@@ -130,63 +97,6 @@ def serveur(
     matrix: AccessMatrix, audit: FakeAuditLog, verifier: FakeTokenVerifier
 ) -> ServeurSousTest:
     return ServeurSousTest(matrix=matrix, audit=audit, verifier=verifier, name="test")
-
-
-def _requete(entetes: Mapping[str, str]) -> Request:
-    """Une vraie requête Starlette, comme celle que porte `request_context.request`."""
-    brutes = [(clef.lower().encode(), valeur.encode()) for clef, valeur in entetes.items()]
-    return Request(
-        {
-            "type": "http",
-            "http_version": "1.1",
-            "asgi": {"version": "3.0", "spec_version": "2.3"},
-            "method": "POST",
-            "scheme": "http",
-            "path": "/mcp",
-            "raw_path": b"/mcp",
-            "query_string": b"",
-            "root_path": "",
-            "server": ("127.0.0.1", 8000),
-            "client": ("127.0.0.1", 51234),
-            "headers": brutes,
-        }
-    )
-
-
-@contextmanager
-def appel_http(entetes: Mapping[str, str] | None) -> Iterator[None]:
-    """Pose le contexte de requête du SDK, comme le serveur bas niveau le fait.
-
-    `entetes is None` simule un appel hors contexte de requête (transport stdio,
-    ou message reçu hors du cycle d'une requête HTTP).
-    """
-    if entetes is None:
-        yield
-        return
-    jeton = request_ctx.set(
-        RequestContext(
-            request_id=1,
-            meta=None,
-            session=cast(Any, None),
-            lifespan_context=None,
-            request=_requete(entetes),
-        )
-    )
-    try:
-        yield
-    finally:
-        request_ctx.reset(jeton)
-
-
-def _entetes(
-    token: str | None = "jeton-alice", correlation: str | None = "corr-test"
-) -> dict[str, str]:
-    entetes: dict[str, str] = {}
-    if token is not None:
-        entetes["Authorization"] = f"Bearer {token}"
-    if correlation is not None:
-        entetes["X-Correlation-Id"] = correlation
-    return entetes
 
 
 async def test_list_tools_ne_renvoie_que_les_tools_du_profil(serveur: ServeurSousTest) -> None:
@@ -381,10 +291,10 @@ async def test_chaque_appel_est_journalise_autorise_comme_refuse(
     assert (autorise.decision, autorise.error_code) == ("allow", None)
     assert (autorise.tool, autorise.arguments) == ("get_stock", {"product_ref": "REF-8842"})
     assert (autorise.subject, autorise.profile) == ("sujet-jeton-alice", "support")
-    assert autorise.correlation_id == "corr-test"
+    assert autorise.correlation_id == CORRELATION
     assert autorise.latency_ms is not None and autorise.latency_ms >= 0
     assert (refuse.decision, refuse.error_code) == ("deny", "UNAUTHORIZED_TOOL")
-    assert refuse.correlation_id == "corr-test"
+    assert refuse.correlation_id == CORRELATION
 
 
 async def test_le_journal_porte_la_regle_de_matrice_et_non_le_code_d_erreur(

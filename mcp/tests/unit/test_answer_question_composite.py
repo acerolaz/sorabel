@@ -17,7 +17,7 @@ from app.domain.models import Scope
 from app.infrastructure.audit.stdout_audit_log import StdoutAuditLog
 from app.infrastructure.stub.rag_stub import CITATION
 
-from tests.unit.harness import CORRELATION, FakeTokenVerifier, appel_http
+from tests.unit.harness import CORRELATION, FakeTokenVerifier, appel_http, entetes
 
 #: Rédaction que le backend `rag-hybride` peut renvoyer et que `mcp` ne doit
 #: jamais propager — recherchée telle quelle dans la réponse rendue au client.
@@ -95,7 +95,7 @@ async def test_le_composite_orchestre_les_trois_briques(
     espion: RagEspion, serveur: GovernedFastMCP
 ) -> None:
     # Arrange / Act
-    with appel_http():
+    with appel_http(entetes()):
         await serveur.call_tool("answer_question", {"query": "tension de REF-8842 ?"})
 
     # Assert — les trois briques de MCP.md §1, une fois chacune
@@ -106,7 +106,7 @@ async def test_le_composite_propage_le_correlation_id_a_chaque_brique(
     espion: RagEspion, serveur: GovernedFastMCP
 ) -> None:
     # Arrange / Act
-    with appel_http():
+    with appel_http(entetes()):
         await serveur.call_tool("answer_question", {"query": "tension ?"})
 
     # Assert
@@ -115,7 +115,7 @@ async def test_le_composite_propage_le_correlation_id_a_chaque_brique(
 
 async def test_le_composite_ecarte_la_redaction_du_backend(serveur: GovernedFastMCP) -> None:
     # Arrange / Act
-    with appel_http():
+    with appel_http(entetes()):
         resultat = await serveur.call_tool("answer_question", {"query": "tension ?"})
 
     # Assert — les sources sont là, la rédaction du backend n'y est nulle part

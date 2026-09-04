@@ -8,7 +8,10 @@ passe donc par la fabrique :
 
     uvicorn app.api.server:build_app --factory   # depuis `mcp/`
 
-Il n'y a **pas** de middleware ASGI d'identité : sous le transport HTTP
+Aucune middleware ASGI d'identité n'est montée ici. Le SDK en propose bien une
+(`AuthContextMiddleware`, montée par `streamable_http_app()` dans la branche
+`if self.settings.auth`), mais elle reste inatteignable faute de configuration
+`auth` — et ce n'est pas un manque à combler : sous le transport HTTP
 streamable avec état, un `ContextVar` posé par une middleware reste figé sur le
 premier appelant de la session (fail *open* démontré par
 `tests/integration/test_sdk_http_context.py`). L'identité est rederivée à chaque

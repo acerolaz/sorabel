@@ -41,6 +41,15 @@ def register_sql_tools(
             sql, identity.profile, tables, scope.masked_columns, correlation_id
         )
 
+    # Les trois tools figés ci-dessous (`get_stock`, `get_order_status`,
+    # `get_customer_order_history`) n'exercent **aucune** barrière de tables : le
+    # port ne prend pas de `tables`, parce que la requête est figée côté
+    # `sorabelsql-api` et non composée ici. Leur autorisation est donc portée
+    # entièrement par la barrière 1 (le tool est dans la matrice, ou il ne l'est
+    # pas) ; `Scope.sql_tables` ne les restreint pas. C'est le design de la
+    # matrice (spec §4.2), pas un oubli : accorder `get_stock` à un profil, c'est
+    # lui accorder les lignes que ce tool figé rend, indépendamment de
+    # `sql_tables`. Seul le masquage de colonnes s'applique encore (E5).
     @server.tool()
     async def get_stock(product_ref: str) -> dict[str, Any]:
         """Retourne le stock disponible pour une référence produit exacte. À utiliser EN PRIORITÉ dès qu'une référence produit (ex: 'REF-8842') est connue. Plus rapide et plus fiable que ask_database pour ce besoin précis — ne PAS utiliser ask_database si ce tool suffit. Args: product_ref: Référence produit exacte (ex: 'REF-8842')."""  # noqa: E501

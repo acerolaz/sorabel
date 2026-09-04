@@ -91,3 +91,15 @@ def test_le_module_n_instancie_aucune_application_a_l_import() -> None:
     # Assert
     assert callable(build_app)
     assert not hasattr(module_serveur, "app")
+
+
+def test_la_fabrique_rend_une_application_asgi_montant_la_route_mcp(
+    environnement: None,
+) -> None:
+    # Arrange / Act — la fabrique est réellement appelée : c'est ce que fera
+    # `uvicorn app.api.server:build_app --factory`.
+    application = build_app()
+
+    # Assert — transport HTTP streamable monté (spec D2)
+    assert "/mcp" in {route.path for route in application.routes}
+    assert application.router.lifespan_context is not None
