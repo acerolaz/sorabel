@@ -1,0 +1,16 @@
+{"question": "Quel est le stock actuel de la référence REF-8842 ?", "allowed_tables": ["stock"], "target_sql": "SELECT quantity FROM stock WHERE product_ref = 'REF-8842'", "expected_result": {"quantity": 42}, "category": "recurrent"}
+{"question": "Quel est le statut de la commande numéro 12345 ?", "allowed_tables": ["orders"], "target_sql": "SELECT status FROM orders WHERE id = 12345", "expected_result": {"status": "shipped"}, "category": "recurrent"}
+{"question": "Combien de commandes sont annulées ?", "allowed_tables": ["orders"], "target_sql": "SELECT COUNT(*) FROM orders WHERE status = 'cancelled'", "expected_result": {"count": 7}, "category": "recurrent"}
+{"question": "Quel est le montant total des commandes du client 42 ?", "allowed_tables": ["orders"], "target_sql": "SELECT SUM(amount) FROM orders WHERE customer_id = 42", "expected_result": {"sum": 1230.50}, "category": "recurrent"}
+{"question": "Combien de clients sont enregistrés ?", "allowed_tables": ["customers"], "target_sql": "SELECT COUNT(*) FROM customers", "expected_result": {"count": 318}, "category": "recurrent"}
+{"question": "Quel est le nom du produit associé à la référence REF-8842 ?", "allowed_tables": ["products"], "target_sql": "SELECT name FROM products WHERE product_ref = 'REF-8842'", "expected_result": {"name": "Câble HDMI 2m"}, "category": "recurrent"}
+{"question": "Combien de commandes sont actuellement en attente ?", "allowed_tables": ["orders"], "target_sql": "SELECT COUNT(*) FROM orders WHERE status = 'pending'", "expected_result": {"count": 14}, "category": "recurrent"}
+{"question": "Quel est le stock de la référence REF-1000 ?", "allowed_tables": ["stock"], "target_sql": "SELECT quantity FROM stock WHERE product_ref = 'REF-1000'", "expected_result": {"quantity": 0}, "category": "recurrent"}
+{"question": "Quelle est la date de création de la commande 999 ?", "allowed_tables": ["orders"], "target_sql": "SELECT created_at FROM orders WHERE id = 999", "expected_result": {"created_at": "2026-08-01T10:00:00"}, "category": "recurrent"}
+{"question": "Combien de commandes ont un montant supérieur à 100 ?", "allowed_tables": ["orders"], "target_sql": "SELECT COUNT(*) FROM orders WHERE amount > 100", "expected_result": {"count": 56}, "category": "recurrent"}
+{"question": "Quel est le nom du client ayant l'identifiant 7 ?", "allowed_tables": ["customers"], "target_sql": "SELECT name FROM customers WHERE id = 7", "expected_result": {"name": "Atelier Dubois"}, "category": "recurrent"}
+{"question": "Quel est le meilleur client ?", "allowed_tables": ["orders", "customers"], "target_sql": null, "expected_result": null, "category": "ambigu"}
+{"question": "Quelle est la commande la plus importante ?", "allowed_tables": ["orders"], "target_sql": null, "expected_result": null, "category": "ambigu"}
+{"question": "Quels sont nos produits les plus populaires ?", "allowed_tables": ["products", "orders"], "target_sql": null, "expected_result": null, "category": "ambigu"}
+{"question": "Quel est le NPS de nos clients ?", "allowed_tables": ["customers"], "target_sql": null, "expected_result": null, "category": "hors_schema"}
+{"question": "Quels sont les avis laissés par les clients sur nos produits ?", "allowed_tables": ["products"], "target_sql": null, "expected_result": null, "category": "hors_schema"}
