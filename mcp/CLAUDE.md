@@ -12,3 +12,4 @@ tools, la matrice d'accès et les séquences d'authentification.
 ## Règles locales
 
 @.claude/rules/mcp-primitives.md
+@.claude/rules/testing-pytest.md

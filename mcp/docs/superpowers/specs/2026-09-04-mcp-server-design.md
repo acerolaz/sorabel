@@ -349,6 +349,15 @@ test est ce que verra le bot Slack.
 | É5 | `MCP.md` §6.1 impose que tout appel sortant transite par l'`api-gateway`, qui n'existe pas | Une base URL configurable par backend (D4) : contrainte de déploiement, pas de code |
 | É6 | `MCP.md` §1 exige qu'`answer_question` compose 3 briques ; aucune brique n'a d'endpoint dans `rag-hybride` | Le composite est écrit ; 1 appel réel, 2 stubs, bascule par configuration (D6) |
 
+Trois écarts constatés en cours d'implémentation, arbitrés à ce moment-là mais
+jamais consignés ailleurs qu'un journal de session — ils survivent donc ici :
+
+| # | Écart | Traitement retenu |
+|---|---|---|
+| É7 | Le périmètre documentaire résolu par la barrière 2 n'est pas transmis au backend RAG réel. `RagHttpClient.answer()` appelle `POST /api/v1/query` de `rag-hybride`, dont le schéma `QueryRequest` ne porte aujourd'hui aucun champ de collection (seulement `query`, `product_ref`, `top_k`) ; le corriger imposerait de modifier `rag-hybride`, hors périmètre (§14) | Le périmètre reste appliqué côté `mcp` — un périmètre vide lève `NotFoundInCorpusError` avant tout appel réseau — mais un profil dont le périmètre RAG serait un sous-ensemble strict non vide ne verrait pas ce filtre appliqué par le backend réel. Un test verrouille la forme exacte du corps HTTP émis, pour forcer une relecture de l'adapter le jour où `rag-hybride` transportera les collections |
+| É8 | Le plan prévoyait `top_k: 5` dans le corps émis vers `rag-hybride` ; `RagHttpClient.answer()` ne le transmet pas | Choix conservé : `mcp` n'a pas à arbitrer la largeur du retrieval, qui reste une décision de `rag-hybride`. Le défaut `top_k=20` de `QueryRequest` s'applique donc — une recherche quatre fois plus large que ce que le plan prévoyait, sans effet sur aucune propriété de gouvernance |
+| É9 | La différenciation par tables et le masquage de colonnes (barrière 2 côté SQL) ne sont démontrés par aucun scénario de `tests/acceptance/` — non par oubli, mais parce que les trois profils de `access_matrix.yaml` partagent aujourd'hui exactement les mêmes `sql_tables` et les mêmes `masked_columns` : aucun sous-ensemble strict n'existe côté SQL, donc aucun scénario ne peut mettre la barrière 2 côté tables en évidence | Fait de conception de la matrice, à revoir si un profil doit un jour être réellement restreint côté données transactionnelles. Le pendant côté RAG, lui, **est** démontré : `support` a un périmètre documentaire (`rag_collections`) strictement plus petit que `sales`/`dev`, et un scénario d'acceptance l'éprouve |
+
 ## 13. Livrables
 
 Tous dans `mcp/` — une PR, un scope (`.claude/rules/git-conventions.md`) :
