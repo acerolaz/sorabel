@@ -1,34 +1,37 @@
 # Bruit macOS
-.DS_Store
+**/.DS_Store
 
 # Environnements de développement
-.idea/
-.vscode/
+**/.idea/
+**/.vscode/
 
 # Worktrees Claude Code (locaux, jamais versionnés)
 .claude/worktrees/
 
 # Secrets — jamais versionnés (cf. .claude/rules/security.md)
-.env*
-!.env.example
+**/.env*
+!**/.env.example
 
 # Environnements virtuels Python
-.venv/
-venv/
+**/.venv/
+**/venv/
 
 # Caches Python et outillage
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.egg-info/
-dist/
-build/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.egg-info/
+**/dist/
+**/build/
 
 # Couverture de tests
-.coverage
-htmlcov/
+**/.coverage
+**/htmlcov/
 
 # Espace de travail Superpowers SDD (local, jamais versionné)
-.superpowers/
+**/.superpowers/
+
+# Contrôle de version
+.git/

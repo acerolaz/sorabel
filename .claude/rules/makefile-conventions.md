@@ -5,6 +5,9 @@
 `sorabel-idp` (service Keycloak conteneurisé, piloté par `docker compose`, pas par
 `make`).
 
+`text2sql-ai` suit le tableau standard C#-style (avec Docker), pas l'exception Python
+partagée ci-dessous — voir « Exception — `text2sql-ai` » en fin de document.
+
 Chaque projet concerné a un `Makefile` à sa racine avec des cibles **standardisées** : mêmes noms quand elles existent, mais certaines cibles peuvent être absentes selon les exceptions ci-dessous.
 
 | Cible | C# (`dotnet`) | Python |
@@ -24,10 +27,22 @@ rester agnostique de la stack.
 
 ## Exception — outillage Python partagé
 
-Les 3 projets Python (`mcp`, `text2sql-ai`, `rag-hybride`) partagent un unique
+Les 2 projets Python restants (`mcp`, `rag-hybride`) partagent un unique
 `pyproject.toml`, un unique `docker-compose.yml` et un unique `.env` à la racine de la
 solution (voir `../../CLAUDE.md` § Commandes) : chaque paquet `app` s'exécute depuis son
 répertoire de travail, jamais installé en site-packages, et il n'y a pas de Dockerfile
 par projet. Leur Makefile n'a donc que `build` (délègue à `cd .. && pip install -e ".[dev]"`),
 `test`, `lint` et `clean` — pas de `docker-build`/`docker-up`/`docker-down`. Les projets
 C# (`api-gateway`, `sorabelsql-api`) suivent le tableau standard sans exception.
+
+## Exception — `text2sql-ai`
+
+Contrairement à `mcp` et `rag-hybride`, `text2sql-ai` n'est pas un processus de dev
+co-localisé avec ses pairs Python : il n'est appelé que via l'API Gateway, depuis des
+environnements distincts, et doit être déployable/scalable indépendamment. Il a donc son
+propre `Dockerfile` et suit le tableau standard complet (`build`/`test`/`lint`/
+`docker-build`/`docker-up`/`docker-down`/`clean`), comme les projets C#, tout en
+continuant de builder depuis le `pyproject.toml` partagé à la racine (`docker-build`
+exécute `pip install -e "..[dev]"` avec la racine de la solution comme contexte de
+build, puis copie `text2sql-ai/app`). Voir
+`text2sql-ai/docs/superpowers/specs/2026-09-04-text2sql-ai-mvp-design.md` pour le détail.

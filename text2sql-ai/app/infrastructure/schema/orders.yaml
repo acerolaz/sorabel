@@ -1,0 +1,21 @@
+name: orders
+comment: "Commandes clients"
+columns:
+  - name: id
+    type: integer
+    comment: "Identifiant de la commande"
+    is_primary_key: true
+  - name: customer_id
+    type: integer
+    comment: "Client ayant passé la commande (customers.id)"
+    is_foreign_key: true
+  - name: status
+    type: varchar
+    comment: "Statut de la commande"
+    enum_values: ["pending", "shipped", "delivered", "cancelled"]
+  - name: amount
+    type: numeric
+    comment: "Montant total de la commande"
+  - name: created_at
+    type: timestamp
+    comment: "Date de création de la commande"

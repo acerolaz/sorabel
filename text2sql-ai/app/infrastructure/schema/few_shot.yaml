@@ -1,0 +1,4 @@
+- question: "Quel est le stock actuel de la référence REF-8842 ?"
+  sql: "SELECT quantity FROM stock WHERE product_ref = 'REF-8842'"
+- question: "Quel est le statut de la commande 12345 ?"
+  sql: "SELECT status FROM orders WHERE id = 12345"
