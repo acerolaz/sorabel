@@ -403,9 +403,7 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
         )
 
     allowed_table_names = {t.name.lower() for t in allowed_tables}
-    allowed_columns = {
-        (t.name.lower(), c.name.lower()) for t in allowed_tables for c in t.columns
-    }
+    allowed_columns = {(t.name.lower(), c.name.lower()) for t in allowed_tables for c in t.columns}
     allowed_column_names = {c.name.lower() for t in allowed_tables for c in t.columns}
 
     for table_expr in statement.find_all(exp.Table):
@@ -526,9 +524,7 @@ def test_prompt_includes_business_rules():
 
 
 def test_prompt_includes_few_shot_examples():
-    prompt = build_system_prompt(
-        [STOCK_TABLE], {}, [{"question": "stock ?", "sql": "SELECT 1"}]
-    )
+    prompt = build_system_prompt([STOCK_TABLE], {}, [{"question": "stock ?", "sql": "SELECT 1"}])
 
     assert "stock ?" in prompt
     assert "SELECT 1" in prompt
@@ -578,8 +574,7 @@ def _format_table(table: SchemaTable) -> str:
             values = ", ".join(f"'{v}'" for v in column.enum_values)
             enum_str = f" -- valeurs possibles : {values}"
         lines.append(
-            f"  {table.name}.{column.name} ({column.type}){flag_str} -- "
-            f"{column.comment}{enum_str}"
+            f"  {table.name}.{column.name} ({column.type}){flag_str} -- {column.comment}{enum_str}"
         )
     return "\n".join(lines)
 
@@ -595,8 +590,7 @@ def build_system_prompt(
     rules_block = "\n".join(rules_lines) if rules_lines else "(aucune règle métier spécifique)"
 
     example_lines = [
-        f"Question : {example['question']}\nSQL : {example['sql']}"
-        for example in few_shot_examples
+        f"Question : {example['question']}\nSQL : {example['sql']}" for example in few_shot_examples
     ]
     examples_block = "\n\n".join(example_lines) if example_lines else "(aucun exemple)"
 
@@ -1048,7 +1042,9 @@ async def test_happy_path_returns_generated():
     use_case = make_use_case([STOCK_TABLE], llm, judge)
 
     outcome = await use_case.execute(
-        GenerationRequest(question="stock de la REF-8842", profile="support", allowed_tables=["stock"])
+        GenerationRequest(
+            question="stock de la REF-8842", profile="support", allowed_tables=["stock"]
+        )
     )
 
     assert outcome.outcome == GenerationOutcomeType.GENERATED
@@ -1070,7 +1066,9 @@ async def test_question_matching_no_known_term_refuses_out_of_schema():
     use_case = make_use_case([STOCK_TABLE], FakeLlm([]), FakeJudge([]))
 
     outcome = await use_case.execute(
-        GenerationRequest(question="quel est le NPS de nos clients ?", profile="support", allowed_tables=["stock"])
+        GenerationRequest(
+            question="quel est le NPS de nos clients ?", profile="support", allowed_tables=["stock"]
+        )
     )
 
     assert outcome.outcome == GenerationOutcomeType.REFUSED_OUT_OF_SCHEMA
@@ -1090,7 +1088,11 @@ async def test_ambiguous_candidate_needs_clarification():
     use_case = make_use_case([STOCK_TABLE], llm, FakeJudge([]))
 
     outcome = await use_case.execute(
-        GenerationRequest(question="quel est le meilleur produit en stock", profile="support", allowed_tables=["stock"])
+        GenerationRequest(
+            question="quel est le meilleur produit en stock",
+            profile="support",
+            allowed_tables=["stock"],
+        )
     )
 
     assert outcome.outcome == GenerationOutcomeType.NEEDS_CLARIFICATION
@@ -1632,9 +1634,7 @@ class AzureOpenAiJudgeClient:
         self._client = client
         self._deployment = deployment
 
-    async def evaluate(
-        self, question: str, intent_reformulation: str, sql: str
-    ) -> JudgeVerdict:
+    async def evaluate(self, question: str, intent_reformulation: str, sql: str) -> JudgeVerdict:
         user_content = (
             f"Question originale : {question}\n"
             f"Reformulation de l'intention : {intent_reformulation}\n"
@@ -1652,9 +1652,7 @@ class AzureOpenAiJudgeClient:
             },
         )
         payload = json.loads(response.choices[0].message.content)
-        return JudgeVerdict(
-            verdict=JudgeVerdictLabel(payload["verdict"]), reason=payload["reason"]
-        )
+        return JudgeVerdict(verdict=JudgeVerdictLabel(payload["verdict"]), reason=payload["reason"])
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1744,7 +1742,11 @@ async def test_generate_happy_path(client):
 
     response = await client.post(
         "/api/v1/generate",
-        json={"question": "stock de la REF-8842 ?", "profile": "support", "allowed_tables": ["stock"]},
+        json={
+            "question": "stock de la REF-8842 ?",
+            "profile": "support",
+            "allowed_tables": ["stock"],
+        },
     )
 
     app.dependency_overrides.clear()
