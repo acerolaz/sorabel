@@ -109,17 +109,19 @@ class SqlExecutionPort(Protocol):
     """Exécution seule de SQL (déjà généré ou fourni tel quel), chaîne de
     garde-fous et tools figés.
 
-    Périmètre et masquage : `tables` (sur `run_sql`/`schema_info`) et
-    `masked_columns` (sur `run_sql`/`customer_orders`) portent le périmètre
-    et le masquage résolus par la matrice pour le profil appelant, jamais
-    choisis par l'appelant ni par le backend (barrière 2, spec §4.2). Les
-    quatre méthodes qui ne portent pas `masked_columns` (`stock`,
-    `order_status`, `query_history`, et `tables` seul sur `schema_info`) sont
-    des tools **figés** dont le périmètre de colonnes est fixe et sans
-    colonne sensible applicable à ce tool — l'absence du paramètre signifie
-    « aucun masquage à transmettre ici », **jamais** « le backend décide » :
-    la matrice reste la seule autorité, `mcp` n'ayant simplement rien à
-    transmettre pour ces tools figés.
+    Périmètre et masquage : `tables` (sur `run_sql`/`schema_info`) porte le
+    périmètre de tables résolu par la matrice, jamais choisi par l'appelant
+    ni par le backend (barrière 2, spec §4.2). La spec §4.2 est catégorique :
+    le masquage n'est pas *appliqué* par `mcp` (seul `sorabelsql-api` voit
+    les lignes), mais il est déclaré par la matrice et **transmis** au
+    backend — ce n'est donc jamais optionnel côté port dès qu'une méthode
+    rend des lignes métier. Règle systématique : **toute méthode qui renvoie
+    des lignes métier reçoit `masked_columns: Sequence[str]`** — `run_sql`,
+    `stock`, `order_status`, `customer_orders`. `query_history` (métadonnées
+    de requêtes passées, pas de ligne métier) et `schema_info` (un schéma,
+    pas des données) sont les deux seules exceptions, justifiées par la
+    nature de leur retour et non par leur statut de tool figé : elles ne
+    portent donc pas `masked_columns`.
 
     `profile: str`, présent sur toutes les méthodes, est une **étiquette
     d'audit/journalisation** (par exemple pour que `sorabelsql-api` inscrive
@@ -150,14 +152,24 @@ class SqlExecutionPort(Protocol):
         """Exécute un SQL déjà généré pour `run_sql_query`, garde-fous compris."""
         ...
 
-    async def stock(self, product_ref: str, profile: str, correlation_id: str) -> dict[str, Any]:
-        """Tool figé `get_stock` : aucune colonne sensible à masquer sur ce périmètre."""
+    async def stock(
+        self,
+        product_ref: str,
+        profile: str,
+        masked_columns: Sequence[str],
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        """Tool figé `get_stock` — renvoie des lignes métier, masquage transmis."""
         ...
 
     async def order_status(
-        self, order_id: str, profile: str, correlation_id: str
+        self,
+        order_id: str,
+        profile: str,
+        masked_columns: Sequence[str],
+        correlation_id: str,
     ) -> dict[str, Any]:
-        """Tool figé `get_order_status` : aucune colonne sensible à masquer sur ce périmètre."""
+        """Tool figé `get_order_status` — renvoie des lignes métier, masquage transmis."""
         ...
 
     async def customer_orders(
@@ -174,9 +186,13 @@ class SqlExecutionPort(Protocol):
     async def schema_info(
         self, profile: str, keyword: str | None, tables: Sequence[str], correlation_id: str
     ) -> dict[str, Any]:
-        """Schéma commenté filtré par périmètre pour `get_schema_info`."""
+        """Schéma commenté filtré par périmètre pour `get_schema_info` — rend un
+        schéma, pas des lignes métier : pas de `masked_columns` à transmettre.
+        """
         ...
 
     async def query_history(self, profile: str, limit: int, correlation_id: str) -> dict[str, Any]:
-        """Tool figé `get_query_history` : aucune colonne sensible à masquer sur ce périmètre."""
+        """Tool figé `get_query_history` — rend des métadonnées de requêtes
+        passées, pas des lignes métier : pas de `masked_columns` à transmettre.
+        """
         ...
