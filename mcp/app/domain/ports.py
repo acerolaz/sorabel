@@ -46,6 +46,14 @@ class RagPort(Protocol):
     dans le dict. Une indisponibilité du backend lève
     `BackendUnavailableError(correlation_id)`, jamais un champ d'erreur dans
     le dict retourné.
+
+    Séquence vide : `collections == ()` signifie que la barrière 2 a résolu
+    un périmètre autorisé de **zéro** collection pour ce profil — une demande
+    explicite, jamais l'absence de filtre. L'implémentation ne doit alors
+    jamais se rabattre sur l'ensemble du corpus ; elle rend zéro résultat
+    (liste/valeur vide, ou `NotFoundInCorpusError` selon la sémantique de la
+    méthode), au même titre qu'un périmètre non vide qui ne couvre pas la
+    question posée.
     """
 
     async def answer(
@@ -96,6 +104,11 @@ class Text2SqlPort(Protocol):
     `SchemaMismatchError(correlation_id)` ; une indisponibilité du backend
     lève `BackendUnavailableError(correlation_id)` ; jamais un champ d'erreur
     dans le dict retourné.
+
+    Séquence vide : `tables == ()` signifie un périmètre autorisé de **zéro**
+    table pour ce profil, jamais l'absence de filtre. Aucune génération n'est
+    alors possible sur une table par défaut ou devinée : l'implémentation
+    lève `SchemaMismatchError(correlation_id)`.
     """
 
     async def generate_sql(
@@ -139,6 +152,12 @@ class SqlExecutionPort(Protocol):
     autorisée au niveau du backend) lève `SchemaMismatchError(correlation_id)`
     ; une indisponibilité du backend lève `BackendUnavailableError(correlation_id)`
     ; jamais un champ d'erreur dans le dict retourné.
+
+    Séquence vide : `tables == ()` (sur `run_sql`/`schema_info`) signifie un
+    périmètre autorisé de **zéro** table pour ce profil, jamais l'absence de
+    filtre. `run_sql` ne peut alors honorer aucune requête et lève
+    `SchemaMismatchError(correlation_id)` ; `schema_info` rend un schéma vide,
+    jamais le schéma complet.
     """
 
     async def run_sql(
