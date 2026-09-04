@@ -26,10 +26,10 @@ async def generate(
         )
     )
     return GenerateResponse(
-        outcome=outcome.outcome.value,
+        outcome=outcome.outcome,
         sql=outcome.sql,
         intent_reformulation=outcome.intent_reformulation,
-        judge_verdict=outcome.judge_verdict.value if outcome.judge_verdict else None,
+        judge_verdict=outcome.judge_verdict,
         attempts=outcome.attempts,
         message=outcome.message,
     )

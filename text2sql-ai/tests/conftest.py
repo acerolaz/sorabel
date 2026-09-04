@@ -28,3 +28,13 @@ async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def tolerant_client():
+    """Client that returns the response produced by the catch-all exception handler
+    instead of re-raising the app exception (Starlette's ServerErrorMiddleware
+    re-raises after handling, so the default transport would propagate it)."""
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac

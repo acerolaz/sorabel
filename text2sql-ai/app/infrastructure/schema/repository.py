@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
+from app.domain.errors import SchemaLoadError
 from app.domain.models import SchemaColumn, SchemaTable
 
 SCHEMA_DIR = Path(__file__).parent
@@ -18,19 +19,27 @@ _RESERVED_FILES = {"business_rules.yaml", "few_shot.yaml"}
 
 
 def _load_table(path: Path) -> SchemaTable:
-    data = cast(dict[str, Any], yaml.safe_load(path.read_text()))
-    columns = [
-        SchemaColumn(
-            name=col["name"],
-            type=col["type"],
-            comment=col["comment"],
-            is_primary_key=col.get("is_primary_key", False),
-            is_foreign_key=col.get("is_foreign_key", False),
-            enum_values=col.get("enum_values", []),
-        )
-        for col in data["columns"]
-    ]
-    return SchemaTable(name=data["name"], comment=data["comment"], columns=columns)
+    """Parse one table YAML file. A missing or malformed key raises SchemaLoadError
+    naming the file, so the failure is diagnosable at boot (see app/main.py's
+    lifespan) instead of surfacing as a bare KeyError on every request."""
+    try:
+        data = cast(dict[str, Any], yaml.safe_load(path.read_text()))
+        columns = [
+            SchemaColumn(
+                name=col["name"],
+                type=col["type"],
+                comment=col["comment"],
+                is_primary_key=col.get("is_primary_key", False),
+                is_foreign_key=col.get("is_foreign_key", False),
+                enum_values=col.get("enum_values", []),
+            )
+            for col in data["columns"]
+        ]
+        return SchemaTable(name=data["name"], comment=data["comment"], columns=columns)
+    except (AttributeError, KeyError, TypeError) as exc:
+        raise SchemaLoadError(f"schéma de table invalide dans {path.name} : {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise SchemaLoadError(f"YAML illisible dans {path.name} : {exc}") from exc
 
 
 def load_business_rules(schema_dir: Path) -> dict[str, str]:

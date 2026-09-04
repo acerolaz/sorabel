@@ -1,8 +1,8 @@
-import httpx
-import openai
-from app.dependencies import get_generate_sql_use_case
+from app.dependencies import get_generate_sql_use_case, get_schema_repository
+from app.domain.errors import JudgeServiceError, LlmServiceError
 from app.domain.models import GenerationOutcome, GenerationOutcomeType, JudgeVerdictLabel
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 class StubUseCase:
@@ -14,9 +14,11 @@ class StubUseCase:
 
 
 class RaisingUseCase:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
     async def execute(self, request):
-        upstream_request = httpx.Request("POST", "https://dummy.openai.azure.com/")
-        raise openai.APIConnectionError(request=upstream_request)
+        raise self._exc
 
 
 def _override(outcome: GenerationOutcome) -> None:
@@ -86,7 +88,9 @@ async def test_health_endpoint_returns_ok(client):
 
 
 async def test_generate_returns_502_when_llm_unavailable(client):
-    app.dependency_overrides[get_generate_sql_use_case] = lambda: RaisingUseCase()
+    app.dependency_overrides[get_generate_sql_use_case] = lambda: RaisingUseCase(
+        LlmServiceError("appel de génération échoué")
+    )
 
     response = await client.post(
         "/api/v1/generate",
@@ -98,3 +102,60 @@ async def test_generate_returns_502_when_llm_unavailable(client):
     data = response.json()
     assert data["error_code"] == "LLM_UNAVAILABLE"
     assert "correlation_id" in data
+
+
+async def test_generate_returns_502_when_judge_unavailable(client):
+    app.dependency_overrides[get_generate_sql_use_case] = lambda: RaisingUseCase(
+        JudgeServiceError("verdict du juge illisible")
+    )
+
+    response = await client.post(
+        "/api/v1/generate",
+        json={"question": "stock ?", "profile": "support", "allowed_tables": ["stock"]},
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 502
+    assert response.json()["error_code"] == "JUDGE_UNAVAILABLE"
+
+
+async def test_unexpected_error_still_honours_the_uniform_error_format(tolerant_client):
+    app.dependency_overrides[get_generate_sql_use_case] = lambda: RaisingUseCase(
+        KeyError("columns")
+    )
+
+    response = await tolerant_client.post(
+        "/api/v1/generate",
+        json={"question": "stock ?", "profile": "support", "allowed_tables": ["stock"]},
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 500
+    data = response.json()
+    assert data["error_code"] == "INTERNAL_ERROR"
+    assert "correlation_id" in data
+    assert "columns" not in data["message"]
+
+
+async def test_openapi_publishes_the_outcome_enumeration(client):
+    response = await client.get("/openapi.json")
+
+    schemas = response.json()["components"]["schemas"]
+    assert set(schemas["GenerationOutcomeType"]["enum"]) == {
+        "generated",
+        "needs_clarification",
+        "refused_out_of_schema",
+        "rejected_guardrail",
+        "rejected_judge",
+    }
+    assert set(schemas["JudgeVerdictLabel"]["enum"]) == {"ALIGNED", "DRIFT", "UNCERTAIN"}
+
+
+def test_lifespan_loads_the_schema_at_boot():
+    """The spec requires a malformed YAML schema to fail fast at boot, not per
+    request: the lifespan must warm the schema caches before serving traffic."""
+    get_schema_repository.cache_clear()
+    assert get_schema_repository.cache_info().currsize == 0
+
+    with TestClient(app):
+        assert get_schema_repository.cache_info().currsize == 1

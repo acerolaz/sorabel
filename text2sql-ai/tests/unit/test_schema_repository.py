@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+from app.domain.errors import SchemaLoadError
 from app.infrastructure.schema.repository import (
     YamlSchemaRepository,
     load_business_rules,
@@ -79,3 +81,19 @@ def test_load_few_shot_examples_reads_yaml_list(tmp_path):
     examples = load_few_shot_examples(tmp_path)
 
     assert examples == [{"question": "q", "sql": "s"}]
+
+
+def test_malformed_table_file_raises_a_contextual_schema_load_error(tmp_path):
+    (tmp_path / "stock.yaml").write_text("name: stock\ncomment: stock\n")
+
+    with pytest.raises(SchemaLoadError) as excinfo:
+        YamlSchemaRepository(schema_dir=tmp_path)
+
+    assert "stock.yaml" in str(excinfo.value)
+
+
+def test_table_file_with_incomplete_column_raises_schema_load_error(tmp_path):
+    (tmp_path / "stock.yaml").write_text("name: stock\ncomment: stock\ncolumns:\n  - name: id\n")
+
+    with pytest.raises(SchemaLoadError):
+        YamlSchemaRepository(schema_dir=tmp_path)

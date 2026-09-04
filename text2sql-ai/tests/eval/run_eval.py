@@ -1,8 +1,9 @@
 """Manual evaluation harness — replays the golden dataset against the real
 generation pipeline (real Azure OpenAI calls, never executing SQL) and reports a
-match rate per category (Text2SQL_Sorabel.md §2). Not wired into CI; run manually:
+match rate per category (Text2SQL_Sorabel.md §2). Not wired into CI; run manually
+from the project root (as a module, so `app` is importable):
 
-    python tests/eval/run_eval.py
+    python -m tests.eval.run_eval
 """
 
 from __future__ import annotations
@@ -31,9 +32,7 @@ DATASET_PATH = Path(__file__).parent / "golden_dataset.jsonl"
 
 
 def _normalize(sql: str) -> str:
-    return sqlglot.parse_one(sql, dialect="postgres").sql(
-        dialect="postgres", normalize=True
-    )
+    return sqlglot.parse_one(sql, dialect="postgres").sql(dialect="postgres", normalize=True)
 
 
 def _sql_matches(generated: str, target: str) -> bool:
@@ -54,9 +53,7 @@ async def main() -> None:
         few_shot_examples=get_few_shot_examples(),
     )
 
-    entries = [
-        json.loads(line) for line in DATASET_PATH.read_text().splitlines() if line.strip()
-    ]
+    entries = [json.loads(line) for line in DATASET_PATH.read_text().splitlines() if line.strip()]
 
     results_by_category: dict[str, list[bool]] = defaultdict(list)
 
@@ -75,9 +72,8 @@ async def main() -> None:
         elif category == "ambigu":
             passed = outcome.outcome == GenerationOutcomeType.NEEDS_CLARIFICATION
         elif category == "recurrent":
-            passed = (
-                outcome.outcome == GenerationOutcomeType.GENERATED
-                and _sql_matches(outcome.sql or "", entry["target_sql"])
+            passed = outcome.outcome == GenerationOutcomeType.GENERATED and _sql_matches(
+                outcome.sql or "", entry["target_sql"]
             )
         else:
             raise ValueError(f"catégorie inconnue : {category}")
