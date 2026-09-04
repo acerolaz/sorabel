@@ -31,15 +31,20 @@ AUTORISATION: contextvars.ContextVar[str] = contextvars.ContextVar(
 class ServeurTemoin(FastMCP):
     """Surcharge le point d'interception de la tâche 10 pour enregistrer ce qu'il voit."""
 
-    vu_par_call_tool: str = "<jamais appelé>"
+    vu_par_call_tool: tuple[str, str] = ("<jamais appelé>", "<jamais appelé>")
 
     async def call_tool(
         self, name: str, arguments: dict[str, Any]
     ) -> Sequence[ContentBlock] | dict[str, Any]:
+        """Enregistre (numéro de requête, en-tête Authorization) vus à l'interception."""
         requete = self.get_context().request_context.request
-        self.vu_par_call_tool = (
-            "<pas de requête HTTP>" if requete is None else str(requete.headers.get("x-seq"))
-        )
+        if requete is None:
+            self.vu_par_call_tool = ("<pas de requête HTTP>", "<pas de requête HTTP>")
+        else:
+            self.vu_par_call_tool = (
+                str(requete.headers.get("x-seq")),
+                str(requete.headers.get("authorization")),
+            )
         return await super().call_tool(name, arguments)
 
 
@@ -80,8 +85,9 @@ async def serveur() -> AsyncIterator[tuple[str, ServeurTemoin]]:
         uvicorn.Config(middleware, host="127.0.0.1", port=port, log_level="critical")
     )
     tache = asyncio.create_task(http.serve())
-    while not http.started:
-        await asyncio.sleep(0.05)
+    async with asyncio.timeout(10):
+        while not http.started:
+            await asyncio.sleep(0.05)
     try:
         yield f"http://127.0.0.1:{port}/mcp", application
     finally:
@@ -118,8 +124,8 @@ async def test_le_context_var_de_la_middleware_est_fige_a_l_ouverture_de_session
     # …mais c'est celle de la requête d'initialisation, identique aux deux appels,
     # alors que chaque appel a été porté par une requête HTTP distincte.
     assert texte_premier == texte_second
-    assert vu_au_premier_appel != vu_au_second_appel
-    assert texte_premier != f"Bearer alice#req{vu_au_premier_appel}"
+    assert vu_au_premier_appel[0] != vu_au_second_appel[0]
+    assert texte_premier != f"Bearer alice#req{vu_au_premier_appel[0]}"
 
 
 async def test_call_tool_atteint_la_requete_http_reelle_de_l_appel(
@@ -143,6 +149,10 @@ async def test_call_tool_atteint_la_requete_http_reelle_de_l_appel(
                 await session.call_tool("echo_contexte", {})
                 second = application.vu_par_call_tool
 
-    # Assert — deux requêtes HTTP distinctes, donc deux numéros distincts et croissants
-    assert premier.isdigit() and second.isdigit()
-    assert int(second) > int(premier)
+    # Assert — l'en-tête Authorization est lisible à l'interception…
+    assert premier[1] == "Bearer alice"
+    assert second[1] == "Bearer alice"
+    # …et il provient bien de deux requêtes HTTP distinctes et successives,
+    # pas d'une valeur capturée une fois pour toutes à l'ouverture de session.
+    assert premier[0].isdigit() and second[0].isdigit()
+    assert int(second[0]) > int(premier[0])
