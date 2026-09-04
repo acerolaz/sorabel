@@ -25,15 +25,9 @@ def build_rag_port(settings: Settings) -> RagPort:
     """Adapter RAG : stub par défaut, client HTTP si `RAG_BACKEND=http`."""
     if settings.rag_backend == "stub":
         return RagStub()
-    # Import paresseux : `RagHttpClient` est livré par la tâche 14. Le placer en
-    # tête de module rendrait tout l'assemblage inimportable d'ici là, alors que
-    # le défaut `RAG_BACKEND=stub` n'atteint jamais cette branche.
-    # Le `type: ignore` couvre ce même décalage : il devient inutile — et
-    # `mypy strict` (warn_unused_ignores) le signalera — dès que la tâche 14
-    # aura livré le module, ce qui est le rappel attendu pour le retirer.
-    from app.infrastructure.http.rag_client import (  # type: ignore[import-not-found]
-        RagHttpClient,
-    )
+    # Import paresseux : place l'assemblage HTTP hors du chemin par défaut
+    # (`RAG_BACKEND=stub`), qui n'atteint jamais cette branche.
+    from app.infrastructure.http.rag_client import RagHttpClient
 
     client: RagPort = RagHttpClient(settings.rag_base_url, settings.mcp_http_timeout_s)
     return client
