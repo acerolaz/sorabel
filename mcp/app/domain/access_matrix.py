@@ -9,6 +9,16 @@ from app.domain.models import Allowed, Decision, Denied, Scope
 #: d'où le préfixe `fail_closed:` — voir la convention de `AccessMatrix`.
 RULE_UNAUTHENTICATED = "fail_closed:unauthenticated"
 
+#: Barrière 2 (spec §4.2) : la demande de l'appelant déborde le périmètre
+#: (`Scope.rag_collections` / `Scope.sql_tables`) que la matrice a accordé à
+#: son profil pour ce tool. Comme pour `RULE_UNAUTHENTICATED`, ce n'est pas
+#: une entrée de matrice mais un défaut de sécurité — d'où le même préfixe
+#: `fail_closed:` — et la règle ne distingue jamais « hors périmètre » de
+#: « ressource inexistante » : elle n'est de toute façon jamais exposée au
+#: client (seul `error_code` l'est, via `ToolError`).
+RULE_COLLECTION_OUT_OF_SCOPE = "fail_closed:collection_out_of_scope"
+RULE_TABLE_OUT_OF_SCOPE = "fail_closed:table_out_of_scope"
+
 
 def projection_rule(profile: str) -> str:
     """Règle journalisée pour une projection de catalogue (`list_tools` autorisé).
