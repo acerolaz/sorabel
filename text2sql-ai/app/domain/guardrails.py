@@ -44,8 +44,15 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
     tables' columns, not validated per-table — acceptable for MVP's single-table-heavy
     query shapes; a later iteration can tighten this with join-aware resolution.
 
+    Table aliases are resolved before column authorization: for `FROM stock s`,
+    `s.quantity` is checked against `stock.quantity`, not against a table named `s`.
+
     CTE aliases are excluded from table authorization checks since they are not
     references to real tables but to subqueries defined in the same statement.
+
+    Schema/catalog-qualified names (`other_schema.stock`) are rejected outright: the
+    filtered schema names bare tables, so a qualifier can only widen the reach of the
+    query beyond what the profile authorizes.
     """
     try:
         statements = [s for s in sqlglot.parse(sql, dialect="postgres") if s is not None]
@@ -73,8 +80,20 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
     # table authorization checks (they are not references to real tables).
     cte_alias_names = {cte.alias.lower() for cte in statement.find_all(exp.CTE)}
 
+    # Map every alias (or bare name, when unaliased) to the real table name it stands
+    # for, so a qualified column can be resolved back to its table before checking.
+    alias_to_table = {
+        (table_expr.alias or table_expr.name).lower(): table_expr.name.lower()
+        for table_expr in statement.find_all(exp.Table)
+    }
+
     for table_expr in statement.find_all(exp.Table):
         table_name = table_expr.name.lower()
+        if table_expr.db or table_expr.catalog:
+            return GuardrailViolation(
+                rule="ast",
+                reason=f"Table qualifiée par un schéma non autorisée : {table_expr.name}",
+            )
         # Skip CTE aliases — they are valid references to CTEs defined in this query.
         if table_name in cte_alias_names:
             continue
@@ -87,12 +106,13 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
     for column_expr in statement.find_all(exp.Column):
         column_name = column_expr.name.lower()
         table_hint = column_expr.table.lower() if column_expr.table else None
-        # If the column is qualified by a CTE alias, skip validation (the CTE itself
-        # is valid, so its columns must be valid too).
-        if table_hint and table_hint in cte_alias_names:
-            continue
         if table_hint:
-            if (table_hint, column_name) not in allowed_columns:
+            resolved_table = alias_to_table.get(table_hint, table_hint)
+            # If the column resolves to a CTE, skip validation (the CTE itself is
+            # valid, so its columns must be valid too).
+            if resolved_table in cte_alias_names:
+                continue
+            if (resolved_table, column_name) not in allowed_columns:
                 return GuardrailViolation(
                     rule="ast",
                     reason=f"Colonne non autorisée référencée : {table_hint}.{column_expr.name}",

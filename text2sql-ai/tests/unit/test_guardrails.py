@@ -10,6 +10,25 @@ STOCK_TABLE = SchemaTable(
     ],
 )
 
+ORDERS_TABLE = SchemaTable(
+    name="orders",
+    comment="commandes",
+    columns=[
+        SchemaColumn(name="id", type="integer", comment="id"),
+        SchemaColumn(name="status", type="varchar", comment="statut"),
+        SchemaColumn(name="customer_id", type="integer", comment="client"),
+    ],
+)
+
+CUSTOMERS_TABLE = SchemaTable(
+    name="customers",
+    comment="clients",
+    columns=[
+        SchemaColumn(name="id", type="integer", comment="id"),
+        SchemaColumn(name="name", type="varchar", comment="nom"),
+    ],
+)
+
 
 def test_blocklist_catches_delete():
     violation = check_blocklist("DELETE FROM stock WHERE product_ref = 'REF-1'")
@@ -81,5 +100,59 @@ def test_ast_accepts_benign_cte():
 
 def test_ast_rejects_cte_reading_unauthorized_table():
     sql = "WITH x AS (SELECT * FROM products) SELECT * FROM x"
+
+    assert check_ast(sql, [STOCK_TABLE]) is not None
+
+
+def test_ast_accepts_table_alias_without_as():
+    sql = "SELECT s.quantity FROM stock s"
+
+    assert check_ast(sql, [STOCK_TABLE]) is None
+
+
+def test_ast_accepts_table_alias_with_as():
+    sql = "SELECT s.quantity FROM stock AS s"
+
+    assert check_ast(sql, [STOCK_TABLE]) is None
+
+
+def test_ast_accepts_aliased_join_across_two_tables():
+    sql = "SELECT o.status, c.name FROM orders o JOIN customers c ON c.id = o.customer_id"
+
+    assert check_ast(sql, [ORDERS_TABLE, CUSTOMERS_TABLE]) is None
+
+
+def test_ast_rejects_unauthorized_column_behind_an_alias():
+    sql = "SELECT s.unknown_column FROM stock s"
+
+    violation = check_ast(sql, [STOCK_TABLE])
+
+    assert violation is not None
+    assert violation.rule == "ast"
+
+
+def test_ast_rejects_column_qualified_by_the_wrong_alias():
+    sql = "SELECT o.quantity FROM orders o"
+
+    assert check_ast(sql, [ORDERS_TABLE, STOCK_TABLE]) is not None
+
+
+def test_ast_accepts_aliased_cte():
+    sql = "WITH x AS (SELECT quantity FROM stock) SELECT y.quantity FROM x AS y"
+
+    assert check_ast(sql, [STOCK_TABLE]) is None
+
+
+def test_ast_rejects_schema_qualified_table():
+    sql = "SELECT quantity FROM other_schema.stock"
+
+    violation = check_ast(sql, [STOCK_TABLE])
+
+    assert violation is not None
+    assert violation.rule == "ast"
+
+
+def test_ast_rejects_catalog_qualified_table():
+    sql = "SELECT quantity FROM other_db.public.stock"
 
     assert check_ast(sql, [STOCK_TABLE]) is not None
