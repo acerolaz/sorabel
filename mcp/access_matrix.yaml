@@ -1,0 +1,36 @@
+# Matrice d'accès du serveur MCP Sorabel — profil × tool × périmètre.
+# Source unique : aucun droit n'est codé en dur ailleurs.
+version: 1
+profiles:
+  support:
+    tools: [search_documents, lookup_by_reference, ask_database, get_stock, get_order_status]
+    rag_collections: [procedure_sav, manuel]
+    sql_tables: [products, stock, orders]
+    masked_columns: [purchase_price, margin]
+  sales:
+    tools:
+      - answer_question
+      - search_documents
+      - lookup_by_reference
+      - get_document_metadata
+      - check_answer_confidence
+      - list_document_types
+      - ask_database
+      - get_stock
+      - get_order_status
+      - get_customer_order_history
+    rag_collections: [datasheet, manuel, procedure_sav]
+    sql_tables: [products, stock, orders]
+    masked_columns: [purchase_price, margin]
+  dev:
+    tools:
+      - search_documents
+      - get_document_metadata
+      - check_answer_confidence
+      - list_document_types
+      - get_schema_info
+      - get_query_history
+      - run_sql_query
+    rag_collections: [datasheet, manuel, procedure_sav]
+    sql_tables: [products, stock, orders]
+    masked_columns: [purchase_price, margin]
