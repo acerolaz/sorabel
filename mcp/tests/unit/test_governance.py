@@ -6,6 +6,7 @@ donc être dérivée de l'en-tête `Authorization` de *cette* requête, à chaqu
 Seuls des ports sont doublés (`AuditLogPort`, `TokenVerifierPort`).
 """
 
+import asyncio
 import json
 import threading
 import uuid
@@ -61,7 +62,7 @@ class FakeTokenVerifier:
 
 
 class ServeurSousTest(GovernedFastMCP):
-    """Serveur de test exposant trois tools et comptant leurs dispatches réels."""
+    """Serveur de test exposant quatre tools et comptant leurs dispatches réels."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -87,6 +88,18 @@ class ServeurSousTest(GovernedFastMCP):
             self.dispatches.append("get_order_status")
             raise NotFoundInCorpusError("corr-du-tool")
 
+        @self.tool()
+        def get_schema_info() -> dict[str, object]:
+            """Schéma accessible — simule une déconnexion client en cours de dispatch.
+
+            `tools/base.py:116` du SDK n'attrape que `except Exception` : une
+            `asyncio.CancelledError` levée ici (héritant de `BaseException`
+            depuis Python 3.8) le traverse sans être réenveloppée, exactement
+            comme une vraie annulation le ferait.
+            """
+            self.dispatches.append("get_schema_info")
+            raise asyncio.CancelledError()
+
 
 @pytest.fixture
 def matrix() -> AccessMatrix:
@@ -94,7 +107,8 @@ def matrix() -> AccessMatrix:
         version=1,
         profiles={
             "support": ProfileEntry(
-                tools=frozenset({"get_stock", "get_order_status"}), scope=PORTEE_SUPPORT
+                tools=frozenset({"get_stock", "get_order_status", "get_schema_info"}),
+                scope=PORTEE_SUPPORT,
             ),
             "vendeur": ProfileEntry(tools=frozenset({"get_query_history"}), scope=PORTEE_VENDEUR),
         },
@@ -181,7 +195,7 @@ async def test_list_tools_ne_renvoie_que_les_tools_du_profil(serveur: ServeurSou
         outils = await serveur.list_tools()
 
     # Assert — la projection est exactement le sous-ensemble du profil `support`
-    assert [outil.name for outil in outils] == ["get_stock", "get_order_status"]
+    assert [outil.name for outil in outils] == ["get_stock", "get_order_status", "get_schema_info"]
 
 
 async def test_list_tools_projette_selon_le_token_de_la_requete_courante(
@@ -194,7 +208,7 @@ async def test_list_tools_projette_selon_le_token_de_la_requete_courante(
         vus_par_mallory = [outil.name for outil in await serveur.list_tools()]
 
     # Assert
-    assert vus_par_alice == ["get_stock", "get_order_status"]
+    assert vus_par_alice == ["get_stock", "get_order_status", "get_schema_info"]
     assert vus_par_mallory == ["get_query_history"]
 
 
@@ -224,7 +238,7 @@ async def test_list_tools_autorise_est_journalise_avec_la_regle_et_le_row_count(
     (entree,) = audit.entrees
     assert entree.decision == "allow"
     assert entree.rule == "projection:support"
-    assert entree.row_count == len(outils) == 2
+    assert entree.row_count == len(outils) == 3
 
 
 async def test_list_tools_est_vide_hors_contexte_de_requete(
@@ -421,6 +435,24 @@ async def test_un_appel_autorise_qui_echoue_est_journalise(
     (entree,) = audit.entrees
     assert (entree.decision, entree.error_code) == ("allow", "NOT_FOUND_IN_CORPUS")
     assert entree.rule == "matrix:support:get_order_status"
+
+
+async def test_un_appel_autorise_annule_est_journalise_sans_etre_avale(
+    serveur: ServeurSousTest, audit: FakeAuditLog
+) -> None:
+    # Arrange / Act — `get_schema_info` lève `asyncio.CancelledError` directement,
+    # non interceptée par le `except Exception` du SDK (`tools/base.py:116`) :
+    # elle traverse jusqu'à `GovernedFastMCP.call_tool` telle quelle.
+    with appel_http(_entetes("jeton-alice")):
+        with pytest.raises(asyncio.CancelledError):
+            await serveur.call_tool("get_schema_info", {})
+
+    # Assert — l'annulation n'est pas avalée (elle vient de se re-lever ci-dessus)
+    # et laisse quand même une trace : sans la clause `except asyncio.CancelledError`
+    # dédiée, cet appel pourtant autorisé ne laisserait aucune ligne au journal.
+    (entree,) = audit.entrees
+    assert (entree.decision, entree.error_code) == ("allow", "CANCELLED")
+    assert entree.rule == "matrix:support:get_schema_info"
 
 
 async def test_un_correlation_id_est_genere_sans_en_tete(
