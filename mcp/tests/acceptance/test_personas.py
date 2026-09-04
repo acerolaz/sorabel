@@ -72,11 +72,14 @@ def corps_erreur(exc: BaseException) -> dict[str, Any]:
     Barrière 1 (`UNAUTHENTICATED`, `UNAUTHORIZED_TOOL` — avant tout dispatch) :
     l'erreur domaine (`ToolError`) est levée telle quelle par `GovernedFastMCP`,
     `str(exc)` est déjà ce corps JSON. Un échec survenu *pendant* le dispatch
-    (barrière 2, ou port qui tombe) est en revanche réenveloppé par le SDK
-    dans **sa propre** `ToolError` (`mcp.server.fastmcp.exceptions.ToolError`,
-    sans rapport d'héritage avec celle du domaine) : l'erreur domaine n'est
-    alors atteignable que via `__cause__`, exactement le mécanisme documenté
-    par `app/api/governance.py::_error_code`.
+    (barrière 2, ou port qui tombe) traverse d'abord `ToolManager.call_tool` du
+    SDK, qui le réenveloppe dans **sa propre** `ToolError`
+    (`mcp.server.fastmcp.exceptions.ToolError`, sans rapport d'héritage avec
+    celle du domaine) — mais `GovernedFastMCP.call_tool` récupère cette erreur
+    domaine par `__cause__` et la relève telle quelle (ruling C1) : `str(exc)`
+    est donc, ici aussi, directement le corps JSON attendu. Le repli sur
+    `exc.__cause__` ci-dessous ne sert donc plus qu'à retomber sur `exc`
+    lui-même dans ce cas, `exc` étant déjà l'erreur domaine.
     """
     cause = exc.__cause__
     source: BaseException = cause if isinstance(cause, ToolError) else exc
@@ -126,8 +129,11 @@ async def test_bot_slack_support_ne_voit_que_ses_cinq_tools(
     # pas seulement déclarés. `backend` vient du catalogue — il est donc connu
     # même d'un appel refusé, et vaut `None` pour ce qui ne vise aucun service en
     # aval (`list_tools`). `row_count` est la *seule* chose retenue du résultat :
-    # 1 ligne pour le stock rendu, et `None` — jamais un zéro fabriqué — pour un
-    # appel qui n'a rendu aucune ligne.
+    # 1 ligne pour le stock rendu ; `None` pour `get_customer_order_history`,
+    # mais pas parce que ce tool aurait rendu zéro ligne — il n'a rendu aucun
+    # résultat du tout, puisque l'appel a été refusé avant tout dispatch
+    # (`UNAUTHORIZED_TOOL`) : `row_count` reste à son défaut, faute de résultat
+    # à décrire.
     par_tool = {ligne["tool"]: ligne for ligne in lignes}
     assert par_tool["get_stock"]["backend"] == "sqlapi"
     assert par_tool["get_stock"]["row_count"] == 1

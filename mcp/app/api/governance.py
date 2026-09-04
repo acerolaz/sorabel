@@ -109,8 +109,11 @@ def _row_count(resultat: Any) -> int | None:
     `.claude/rules/security.md`) : rien d'autre du résultat n'est lu ni retenu.
     `convert_result` du SDK rend un couple `(contenu, structuré)` dès qu'un
     schéma de sortie est déclaré — c'est le second membre qui porte le dict du
-    tool. Un tool qui ne rend aucune ligne n'a pas de `row_count` : `None` est
-    alors la bonne valeur, jamais un zéro fabriqué qui se lirait « zéro ligne ».
+    tool. Un résultat qui ne porte pas de `row_count` exploitable — absent, ou
+    pas un entier — n'a pas de `row_count` ici non plus : `None` est alors la
+    valeur retenue, jamais un zéro fabriqué. Ce n'est pas la même chose qu'un
+    tool qui rend explicitement zéro ligne : celui-là pose `row_count: 0` dans
+    son résultat, et c'est ce `0`, pas `None`, qui est journalisé.
     """
     if isinstance(resultat, tuple) and len(resultat) == 2:
         resultat = resultat[1]
