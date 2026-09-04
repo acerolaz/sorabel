@@ -71,13 +71,25 @@ qui la romprait.
    `UNAUTHENTICATED`/`UNAUTHORIZED_TOOL` **avant** d'atteindre la fonction du
    tool). Un tool absent du catalogue projeté ne peut être ni vu ni appelé.
 2. **Barrière 2 — périmètre** : `resolve_collections`/`resolve_tables`
-   (`app/application/use_cases/forward_to_backend.py`), appelées depuis
-   chaque fonction tool. Le périmètre transmis au backend vient toujours de
-   `Scope` (résolu par la matrice pour le profil authentifié) ; une demande
-   explicite du client (`collections=...`) ne peut que le restreindre — une
-   seule valeur hors périmètre invalide la demande entière
-   (`UNAUTHORIZED_COLLECTION`/`UNAUTHORIZED_TABLE`), jamais une intersection
-   silencieuse.
+   (`app/application/use_cases/forward_to_backend.py`). Le périmètre transmis
+   au backend vient toujours de `Scope` (résolu par la matrice pour le profil
+   authentifié) ; une demande explicite du client (`collections=...`) ne peut
+   que le restreindre — une seule valeur hors périmètre invalide la demande
+   entière (`UNAUTHORIZED_COLLECTION`/`UNAUTHORIZED_TABLE`), jamais une
+   intersection silencieuse.
+
+   Côté RAG, les 6 tools de `app/api/tools/rag.py` appellent tous
+   `resolve_collections`. Côté SQL, ce n'est vrai que pour 3 des 7 tools de
+   `app/api/tools/sql.py` (`ask_database`, `run_sql_query`, `get_schema_info`) :
+   `get_stock`, `get_order_status`, `get_customer_order_history` et
+   `get_query_history` n'appellent ni l'une ni l'autre — un choix de
+   conception documenté juste au-dessus de ces fonctions, pas un oubli. Ces
+   quatre tools figés ne composent aucune requête à partir d'une table : le
+   port qu'ils appellent n'en prend pas, et leur autorisation est portée
+   entièrement par la barrière 1. `UNAUTHORIZED_TABLE` reste un code de la
+   spec §7, mais aucun tool SQL n'accepte aujourd'hui de `tables` fourni par
+   l'appelant (`resolve_tables` n'est jamais invoqué qu'avec `None`) : ce code
+   est donc inatteignable par une demande du client en production actuelle.
 
 ## Ajouter un nouveau tool
 
