@@ -203,8 +203,8 @@ explains why (never confirming/denying unauthorized-table existence).
   file at startup → fails fast at boot, not per-request.
 - Uniform error format `{error_code, message, correlation_id}` via a `main.py` exception
   handler, same as `rag-hybride`.
-- No broad `except Exception` — `sqlglot.ParseError` and Azure OpenAI SDK exceptions
-  caught specifically.
+- Avoid broad try/except in the pipeline: `sqlglot.ParseError` and Azure OpenAI SDK exceptions
+  are caught specifically; a catch-all FastAPI exception handler is used only to preserve the uniform error format.
 - Every terminal outcome (including rejections/refusals) is logged with: timestamp,
   profile, `allowed_tables`, the question, the generated SQL (if any), outcome, and
   attempt count — per E3 ("chaque requête générée... doit être journalisée") and
