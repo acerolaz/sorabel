@@ -74,18 +74,20 @@ async def main() -> None:
             passed = outcome.outcome == GenerationOutcomeType.REFUSED_OUT_OF_SCHEMA
         elif category == "ambigu":
             passed = outcome.outcome == GenerationOutcomeType.NEEDS_CLARIFICATION
-        else:
+        elif category == "recurrent":
             passed = (
                 outcome.outcome == GenerationOutcomeType.GENERATED
                 and _sql_matches(outcome.sql or "", entry["target_sql"])
             )
+        else:
+            raise ValueError(f"catégorie inconnue : {category}")
 
         results_by_category[category].append(passed)
         print(f"[{'PASS' if passed else 'FAIL'}] ({category}) {entry['question']}")
 
     print("\n--- Résumé ---")
     for category, results in results_by_category.items():
-        rate = sum(results) / len(results) * 100
+        rate = sum(results) / len(results) * 100 if results else 0.0
         print(f"{category}: {sum(results)}/{len(results)} ({rate:.0f}%)")
 
 
