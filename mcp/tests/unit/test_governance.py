@@ -4,7 +4,7 @@ Ces tests pilotent `GovernedFastMCP` en posant le contexte de requête du SDK
 (`request_ctx`) exactement comme le fait le serveur bas niveau : l'identité doit
 donc être dérivée de l'en-tête `Authorization` de *cette* requête, à chaque appel.
 Seuls des ports sont doublés (`AuditLogPort`, `TokenVerifierPort`) — par les
-doubles de `tests/unit/harness.py`, unique copie du harnais.
+doubles de `tests/harness.py`, unique copie du harnais.
 """
 
 import asyncio
@@ -21,8 +21,8 @@ from app.domain.errors import NotFoundInCorpusError, ToolError
 from app.domain.models import Scope
 from mcp.server.fastmcp.exceptions import ToolError as SdkToolError
 
-from tests.unit.harness import CORRELATION, FakeAuditLog, FakeTokenVerifier, appel_http
-from tests.unit.harness import entetes as _entetes
+from tests.harness import CORRELATION, FakeAuditLog, FakeTokenVerifier, appel_http
+from tests.harness import entetes as _entetes
 
 PORTEE_SUPPORT = Scope(("manuels",), ("stock",), ("marge",))
 PORTEE_VENDEUR = Scope(("fiches",), ("commandes",), ())

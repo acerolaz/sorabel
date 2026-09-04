@@ -33,7 +33,7 @@ from app.domain.models import AuditEntry, Scope
 from app.infrastructure.audit.stdout_audit_log import StdoutAuditLog
 from mcp.server.fastmcp.exceptions import ToolError as SdkToolError
 
-from tests.unit.harness import FakeAuditLog, FakeTokenVerifier, appel_http, entetes
+from tests.harness import FakeAuditLog, FakeTokenVerifier, appel_http, entetes
 
 #: Périmètre accordé au profil par la matrice — jamais négociable par l'appelant.
 PORTEE_VENTE = Scope(("datasheet", "manuel"), ("products", "orders"), ("purchase_price",))

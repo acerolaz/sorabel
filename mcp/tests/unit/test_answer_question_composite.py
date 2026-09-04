@@ -17,7 +17,7 @@ from app.domain.models import Scope
 from app.infrastructure.audit.stdout_audit_log import StdoutAuditLog
 from app.infrastructure.stub.rag_stub import CITATION
 
-from tests.unit.harness import CORRELATION, FakeTokenVerifier, appel_http, entetes
+from tests.harness import CORRELATION, FakeTokenVerifier, appel_http, entetes
 
 #: Rédaction que le backend `rag-hybride` peut renvoyer et que `mcp` ne doit
 #: jamais propager — recherchée telle quelle dans la réponse rendue au client.

@@ -1,11 +1,12 @@
-"""Harnais commun aux tests unitaires qui pilotent `GovernedFastMCP`.
+"""Harnais commun aux tests qui pilotent `GovernedFastMCP` (unitaires et acceptance).
 
 `call_tool` rederive l'identité à *chaque* appel depuis la requête HTTP courante
 (cf. `app/api/governance.py`) : un test ne peut donc pas se contenter de poser
 `current_identity`, il doit poser le contexte de requête du SDK comme le fait le
 serveur bas niveau. Ce module rassemble ce qu'il faut pour cela — doubles de
-ports compris — et il est l'unique copie : `test_governance.py`,
-`test_tool_perimeter.py` et `test_answer_question_composite.py` l'importent.
+ports compris — et il est l'unique copie : `tests/unit/test_governance.py`,
+`tests/unit/test_tool_perimeter.py`, `tests/unit/test_answer_question_composite.py`
+et `tests/acceptance/conftest.py` l'importent.
 """
 
 import threading

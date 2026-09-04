@@ -14,7 +14,7 @@ laisserait `list_tools()`/`call_tool()` hors contexte de requête, donc
 que cette architecture a été conçue pour empêcher côté middleware ASGI, mais
 qui deviendrait ici un faux négatif de test si on le contournait.
 
-Le harnais commun (`tests/unit/harness.py`) fournit ce que ces scénarios
+Le harnais commun (`tests/harness.py`) fournit ce que ces scénarios
 doivent poser pour rester fidèles à ce mécanisme : un `TokenVerifierPort`
 factice (jeton → profil) et une vraie requête Starlette portant l'en-tête
 `Authorization`, réutilisées ici comme dans `tests/unit/test_governance.py`
@@ -46,8 +46,8 @@ from app.infrastructure.stub.rag_stub import RagStub
 from app.infrastructure.stub.sqlapi_stub import SqlApiStub
 from app.infrastructure.stub.text2sql_stub import Text2SqlStub
 
-from tests.unit.harness import FakeTokenVerifier, appel_http
-from tests.unit.harness import entetes as _entetes
+from tests.harness import FakeTokenVerifier, appel_http
+from tests.harness import entetes as _entetes
 
 MATRICE = Path(__file__).resolve().parents[2] / "access_matrix.yaml"
 
