@@ -6,6 +6,12 @@ sans droit déclaré dans la matrice — ou enregistré sans figurer au
 catalogue — passerait inaperçu. Ces quatre tests vérifient que les trois
 sources (registre SDK, `CATALOG_BY_NAME`, `access_matrix.yaml`) coïncident
 exactement, et que la liste des délégations RAG au stub reste explicite.
+
+Un cinquième test y ajoute le seul autre verrou d'exhaustivité de la
+gouvernance : le serveur de production n'expose **que** des tools. Il vit ici,
+et non dans `tests/unit/test_governance.py`, parce qu'il ne peut garder que ce
+sur quoi il porte — et ce qu'il faut garder est `build_server()`, pas une
+sous-classe de test.
 """
 
 from collections.abc import Iterator
@@ -81,3 +87,26 @@ def test_les_delegations_au_stub_sont_exactement_celles_attendues() -> None:
     assert RagHttpClient.DELEGATED_TO_STUB == frozenset(
         {"search", "lookup", "document_metadata", "confidence", "document_types"}
     )
+
+
+async def test_le_serveur_n_expose_ni_ressource_ni_prompt(environnement: None) -> None:
+    """`GovernedFastMCP` ne gouverne ni les ressources ni les prompts.
+
+    La barrière 1 ne surcharge que `list_tools()` et `call_tool()` : une
+    ressource ou un prompt enregistré dans `app/api/server.py` serait servi
+    sans consultation de la matrice d'accès **et** sans ligne d'audit — un
+    chemin de données hors gouvernance (E4, E5). Ce test est le seul rempart
+    annoncé contre cette ouverture ; il porte donc sur le serveur réellement
+    assemblé par `build_server()`, jamais sur une doublure de test, qu'on
+    pourrait laisser vide indéfiniment sans rien garder.
+    """
+    # Arrange / Act
+    serveur = build_server()
+    ressources = await serveur.list_resources()
+    modeles = await serveur.list_resource_templates()
+    prompts = await serveur.list_prompts()
+
+    # Assert
+    assert ressources == []
+    assert modeles == []
+    assert prompts == []

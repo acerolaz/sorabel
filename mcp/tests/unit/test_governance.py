@@ -391,23 +391,3 @@ async def test_un_correlation_id_est_genere_sans_en_tete(
     uuid.UUID(premiere)
     uuid.UUID(seconde)
     assert premiere != seconde
-
-
-async def test_le_serveur_n_expose_ni_ressource_ni_prompt(serveur: ServeurSousTest) -> None:
-    """Garde-fou de non-régression : `GovernedFastMCP` ne gouverne pas ces primitives.
-
-    Rien n'est enregistré aujourd'hui sur `ServeurSousTest`, donc ces listes sont
-    vides sans qu'aucune barrière n'intervienne. Le jour où une ressource ou un
-    prompt sera ajouté à ce serveur sans passer par la matrice d'accès, ce test
-    échouera et rappellera de gouverner ces points d'entrée (cf. docstring de
-    `GovernedFastMCP`).
-    """
-    # Arrange / Act
-    ressources = await serveur.list_resources()
-    modeles = await serveur.list_resource_templates()
-    prompts = await serveur.list_prompts()
-
-    # Assert
-    assert ressources == []
-    assert modeles == []
-    assert prompts == []
