@@ -36,7 +36,7 @@ def _load_table(path: Path) -> SchemaTable:
             for col in data["columns"]
         ]
         return SchemaTable(name=data["name"], comment=data["comment"], columns=columns)
-    except (AttributeError, KeyError, TypeError) as exc:
+    except (KeyError, TypeError) as exc:
         raise SchemaLoadError(f"schéma de table invalide dans {path.name} : {exc}") from exc
     except yaml.YAMLError as exc:
         raise SchemaLoadError(f"YAML illisible dans {path.name} : {exc}") from exc
