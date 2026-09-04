@@ -1,6 +1,10 @@
 import json
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
+import openai
+import pytest
+from app.domain.errors import JudgeServiceError
 from app.domain.models import JudgeVerdictLabel
 from app.infrastructure.azure_openai.judge_client import AzureOpenAiJudgeClient
 
@@ -56,3 +60,27 @@ async def test_evaluate_sends_question_reformulation_and_sql():
     assert "ma question" in user_message
     assert "ma reformulation" in user_message
     assert "SELECT 1" in user_message
+
+
+async def test_evaluate_wraps_sdk_failure_in_domain_error():
+    fake_client = MagicMock()
+    fake_client.chat.completions.create = AsyncMock(
+        side_effect=openai.APIConnectionError(
+            request=httpx.Request("POST", "https://dummy.openai.azure.com/")
+        )
+    )
+    judge = AzureOpenAiJudgeClient(fake_client, "judge-deployment")
+
+    with pytest.raises(JudgeServiceError):
+        await judge.evaluate("q", "reformulation", "SELECT 1")
+
+
+async def test_evaluate_wraps_unknown_verdict_label_in_domain_error():
+    fake_client = MagicMock()
+    fake_client.chat.completions.create = AsyncMock(
+        return_value=_make_response({"verdict": "MAYBE", "reason": "?"})
+    )
+    judge = AzureOpenAiJudgeClient(fake_client, "judge-deployment")
+
+    with pytest.raises(JudgeServiceError):
+        await judge.evaluate("q", "reformulation", "SELECT 1")

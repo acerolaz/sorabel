@@ -89,8 +89,9 @@ async def test_empty_allowed_tables_refuses_out_of_schema():
     assert outcome.outcome == GenerationOutcomeType.REFUSED_OUT_OF_SCHEMA
 
 
-async def test_question_matching_no_known_term_refuses_out_of_schema():
-    use_case = make_use_case([STOCK_TABLE], FakeLlm([]), FakeJudge([]))
+async def test_model_flagging_out_of_schema_refuses_out_of_schema():
+    llm = FakeLlm([SqlCandidate(sql="", intent_reformulation="", is_out_of_schema=True)])
+    use_case = make_use_case([STOCK_TABLE], llm, FakeJudge([]))
 
     outcome = await use_case.execute(
         GenerationRequest(
@@ -101,6 +102,28 @@ async def test_question_matching_no_known_term_refuses_out_of_schema():
     )
 
     assert outcome.outcome == GenerationOutcomeType.REFUSED_OUT_OF_SCHEMA
+    assert outcome.attempts == 1
+    assert outcome.message is not None
+    assert len(llm.calls) == 1
+
+
+async def test_french_question_without_english_identifier_reaches_the_llm():
+    """Regression: the lexical pre-check short-circuited any French question that
+    did not literally contain an English schema identifier."""
+    llm = FakeLlm([SqlCandidate(sql="SELECT quantity FROM stock", intent_reformulation="stock")])
+    judge = FakeJudge([JudgeVerdict(verdict=JudgeVerdictLabel.ALIGNED, reason="ok")])
+    use_case = make_use_case([STOCK_TABLE], llm, judge)
+
+    outcome = await use_case.execute(
+        GenerationRequest(
+            question="Quel est le statut de la commande 12345 ?",
+            profile="support",
+            allowed_tables=["stock"],
+        )
+    )
+
+    assert len(llm.calls) == 1
+    assert outcome.outcome == GenerationOutcomeType.GENERATED
 
 
 async def test_ambiguous_candidate_needs_clarification():
@@ -141,6 +164,22 @@ async def test_guardrail_violation_retries_then_rejects():
     assert outcome.attempts == 3
     assert llm.calls[0] is None
     assert llm.calls[1] is not None
+    assert "DROP TABLE stock" in llm.calls[1]
+
+
+async def test_judge_drift_feedback_replays_the_rejected_sql():
+    candidate = SqlCandidate(sql="SELECT quantity FROM stock", intent_reformulation="x")
+    llm = FakeLlm([candidate, candidate, candidate])
+    drift = JudgeVerdict(verdict=JudgeVerdictLabel.DRIFT, reason="mauvaise période")
+    judge = FakeJudge([drift, drift, drift])
+    use_case = make_use_case([STOCK_TABLE], llm, judge)
+
+    await use_case.execute(
+        GenerationRequest(question="stock ?", profile="support", allowed_tables=["stock"])
+    )
+
+    assert llm.calls[1] is not None
+    assert "SELECT quantity FROM stock" in llm.calls[1]
 
 
 async def test_judge_drift_retries_then_rejects():
@@ -181,4 +220,8 @@ async def test_execute_logs_outcome(caplog):
             GenerationRequest(question="stock ?", profile="support", allowed_tables=["stock"])
         )
 
-    assert any(record.message == "text2sql_generation" for record in caplog.records)
+    audit = [r for r in caplog.records if r.message == "text2sql_generation"]
+    assert len(audit) == 1
+    assert audit[0].outcome == "generated"
+    assert audit[0].profile == "support"
+    assert audit[0].attempts == 1

@@ -17,6 +17,32 @@ READONLY_INSTRUCTION = (
     "suppression, mise à jour), refuse et explique que tu ne fais que de la lecture."
 )
 
+AMBIGUITY_INSTRUCTION = (
+    "Si la question admet plusieurs interprétations métier (critère de tri, de "
+    "mesure ou de période non précisé), ne devine pas : pose is_ambiguous à true, "
+    "laisse sql à null et formule dans clarification_needed la question de "
+    "clarification à poser à l'utilisateur."
+)
+
+OUT_OF_SCHEMA_INSTRUCTION = (
+    "Si le schéma ci-dessus ne contient pas la donnée demandée, ne l'invente pas et "
+    "ne la remplace pas par une colonne approchante : pose is_out_of_schema à true, "
+    "laisse sql à null et indique dans clarification_needed quelle donnée manque."
+)
+
+INTENT_REFORMULATION_INSTRUCTION = (
+    "Dès que tu produis une requête, renseigne intent_reformulation : une "
+    "reformulation d'une seule ligne, en français, de ce que cette requête calcule "
+    "réellement — pas une paraphrase de la question."
+)
+
+RESPONSE_FORMAT_INSTRUCTION = (
+    f"{AMBIGUITY_INSTRUCTION}\n{OUT_OF_SCHEMA_INSTRUCTION}\n"
+    f"{INTENT_REFORMULATION_INSTRUCTION}\n"
+    "is_ambiguous et is_out_of_schema ne peuvent pas être vrais en même temps ; "
+    "quand les deux sont faux, sql doit contenir une requête SELECT complète."
+)
+
 
 def _format_table(table: SchemaTable) -> str:
     lines = [f"Table {table.name} -- {table.comment}"]
@@ -57,5 +83,6 @@ def build_system_prompt(
         f"## Schéma disponible\n{schema_block}\n\n"
         f"## Règles métier\n{rules_block}\n\n"
         f"## Exemples\n{examples_block}\n\n"
+        f"## Format de réponse\n{RESPONSE_FORMAT_INSTRUCTION}\n\n"
         f"{CRITICAL_INSTRUCTION}"
     )

@@ -135,6 +135,14 @@ text2sql-ai/
    asks for a concept absent from the *entire* static schema (checked against the
    unfiltered table/column names, to distinguish "doesn't exist" from "not authorized"),
    return `outcome: "refused_out_of_schema"` — no LLM call.
+
+   > **Amendement (2026-09-04)** — cette étape a été remplacée à l'implémentation. Le
+   > contrôle lexical comparait la question à des identifiants de schéma anglais alors
+   > que les questions sont françaises : 13 des 16 entrées du golden dataset étaient
+   > refusées avant tout appel au LLM. Seul le cas déterministe subsiste (schéma filtré
+   > vide) ; le refus sémantique est désormais signalé par le modèle lui-même, via un
+   > champ `is_out_of_schema` du JSON structuré, exactement comme l'ambiguïté l'est via
+   > `is_ambiguous`. Coût assumé : une question hors-schéma consomme un appel LLM.
 3. **Prompt assembly** (`build_system_prompt`): filtered schema + enum values spelled out
    + a handful of static few-shot examples from `few_shot.yaml` (curated, not the full
    golden dataset) + the business-rule glossary from `business_rules.yaml` (e.g. "CA du

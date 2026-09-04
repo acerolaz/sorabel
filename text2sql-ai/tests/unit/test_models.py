@@ -38,6 +38,7 @@ def test_sql_candidate_defaults_to_not_ambiguous():
 
     assert candidate.is_ambiguous is False
     assert candidate.clarification_needed is None
+    assert candidate.is_out_of_schema is False
 
 
 def test_judge_verdict_label_values_match_api_contract():

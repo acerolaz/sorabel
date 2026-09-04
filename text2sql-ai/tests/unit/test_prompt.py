@@ -56,3 +56,23 @@ def test_prompt_includes_few_shot_examples():
 
     assert "stock ?" in prompt
     assert "SELECT 1" in prompt
+
+
+def test_prompt_explains_when_to_flag_ambiguity():
+    prompt = build_system_prompt([STOCK_TABLE], {}, [])
+
+    assert "is_ambiguous" in prompt
+    assert "clarification_needed" in prompt
+
+
+def test_prompt_explains_when_to_flag_out_of_schema():
+    prompt = build_system_prompt([STOCK_TABLE], {}, [])
+
+    assert "is_out_of_schema" in prompt
+
+
+def test_prompt_explains_what_intent_reformulation_must_contain():
+    prompt = build_system_prompt([STOCK_TABLE], {}, [])
+
+    assert "intent_reformulation" in prompt
+    assert "une seule ligne" in prompt

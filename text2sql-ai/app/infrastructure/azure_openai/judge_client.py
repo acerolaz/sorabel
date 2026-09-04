@@ -7,8 +7,10 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
+import openai
 from openai import AsyncAzureOpenAI
 
+from app.domain.errors import JudgeServiceError
 from app.domain.models import JudgeVerdict, JudgeVerdictLabel
 
 JUDGE_SYSTEM_PROMPT = (
@@ -39,19 +41,29 @@ class AzureOpenAiJudgeClient:
             f"Reformulation de l'intention : {intent_reformulation}\n"
             f"Requête SQL générée : {sql}"
         )
-        response = await self._client.chat.completions.create(
-            model=self._deployment,
-            messages=[
-                {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": "judge_verdict", "schema": JUDGE_RESPONSE_SCHEMA},
-            },
-        )
-        content = cast(str, response.choices[0].message.content)
-        payload_any = json.loads(content)
-        payload = cast(dict[str, Any], payload_any)
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._deployment,
+                messages=[
+                    {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "judge_verdict", "schema": JUDGE_RESPONSE_SCHEMA},
+                },
+            )
+        except openai.OpenAIError as exc:
+            raise JudgeServiceError(f"appel du juge échoué : {exc}") from exc
 
-        return JudgeVerdict(verdict=JudgeVerdictLabel(payload["verdict"]), reason=payload["reason"])
+        # json.JSONDecodeError is a ValueError, which also covers an unknown verdict
+        # label; TypeError covers a null content, IndexError/KeyError a truncated
+        # response.
+        try:
+            content = cast(str, response.choices[0].message.content)
+            payload = cast(dict[str, Any], json.loads(content))
+            return JudgeVerdict(
+                verdict=JudgeVerdictLabel(payload["verdict"]), reason=payload["reason"]
+            )
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise JudgeServiceError("verdict du juge illisible") from exc

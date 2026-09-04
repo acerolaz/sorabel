@@ -37,6 +37,7 @@ class SqlCandidate:
     intent_reformulation: str
     is_ambiguous: bool = False
     clarification_needed: str | None = None
+    is_out_of_schema: bool = False
 
 
 class JudgeVerdictLabel(str, Enum):
