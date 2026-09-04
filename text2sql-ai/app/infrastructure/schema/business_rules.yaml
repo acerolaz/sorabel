@@ -1,0 +1,2 @@
+"CA du mois": "SUM(orders.amount) WHERE orders.status != 'cancelled' AND orders.created_at est dans le mois calendaire en cours"
+"commande active": "orders.status IN ('pending', 'shipped')"

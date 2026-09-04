@@ -1,0 +1,10 @@
+name: stock
+comment: "Niveaux de stock par référence produit"
+columns:
+  - name: product_ref
+    type: varchar
+    comment: "Clé pivot vers le catalogue produit (products.product_ref)"
+    is_foreign_key: true
+  - name: quantity
+    type: integer
+    comment: "Quantité actuellement en stock"
