@@ -252,11 +252,20 @@ async def test_un_appel_sans_token_ne_voit_rien_et_ne_peut_rien(
 async def test_un_backend_injoignable_donne_une_erreur_typee(
     gateway: Gateway, journal: StringIO, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Arrange — le port RAG tombe en panne réseau
+    # Arrange — le port RAG tombe en panne réseau. La doublure reprend le
+    # `correlation_id` qu'elle reçoit en argument — comme le fait le vrai
+    # adapter (`app/infrastructure/http/rag_client.py::raise
+    # BackendUnavailableError(correlation_id)`) — au lieu de fabriquer la
+    # sienne : une doublure qui ignore cet argument (`*args, **kwargs`) et
+    # lève toujours la même constante prouverait cette égalité sans jamais
+    # exercer la propagation réelle de la corrélation de l'appel à travers
+    # `call_context()` puis le composite `answer_question`.
     from app.domain.errors import BackendUnavailableError
 
-    async def tombe(*args: object, **kwargs: object) -> dict[str, Any]:
-        raise BackendUnavailableError(CORRELATION)
+    async def tombe(
+        self: RagStub, query: str, collections: Sequence[str], correlation_id: str
+    ) -> dict[str, Any]:
+        raise BackendUnavailableError(correlation_id)
 
     monkeypatch.setattr("app.infrastructure.stub.rag_stub.RagStub.answer", tombe)
 
@@ -269,6 +278,10 @@ async def test_un_backend_injoignable_donne_une_erreur_typee(
     charge = corps_erreur(refus.value)
     assert charge["error_code"] == "BACKEND_UNAVAILABLE"
     assert set(charge) == {"error_code", "message", "correlation_id"}
+    # La doublure ne connaît que le `correlation_id` qu'on lui a passé : cette
+    # égalité prouve que la corrélation de la requête HTTP (posée par
+    # `gateway`) traverse bien `call_context()` puis `answer_question` jusqu'au
+    # port, et pas seulement que la doublure recopie une constante.
     assert charge["correlation_id"] == CORRELATION
     # E5 : même exigence que le scénario hors-corpus — appel autorisé, échec
     # de backend, la ligne doit porter `allow` et le code réel.
