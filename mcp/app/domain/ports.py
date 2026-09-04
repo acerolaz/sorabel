@@ -21,7 +21,10 @@ class AuditLogPort(Protocol):
         Contrat : ne lève **jamais**. Appelé depuis le chemin critique de
         `call_tool`, y compris pour journaliser un refus — une exception ici
         ne doit jamais empêcher la réponse (ou l'erreur) d'atteindre le
-        client, ni faire fuiter un détail d'implémentation du journal.
+        client, ni faire fuiter un détail d'implémentation du journal. En cas
+        d'échec de sérialisation ou d'écriture, l'implémentation absorbe
+        l'erreur ; elle peut la signaler sur `stderr`, jamais sur le canal du
+        journal lui-même (spec §8 : stdout est réservé aux lignes d'audit).
         """
         ...
 
@@ -32,50 +35,108 @@ class RagPort(Protocol):
     choisi par l'appelant lui-même (barrière 2, spec §4.2). `correlation_id`
     est généré à l'entrée de `call_tool` et propagé tel quel au backend pour
     corréler les journaux de bout en bout (spec §8).
+
+    Retour : chaque méthode rend un dict dont les clés métier sont propres à
+    l'endpoint (citations, confidence, métadonnées...). Une implémentation
+    stub place systématiquement `source: "stub"` dans le dict retourné (spec
+    §9.2) — une donnée fictive ne peut ainsi jamais être confondue avec une
+    donnée réelle, ni côté client ni dans l'audit (`AuditEntry.backend`).
+    Un refus documentaire (le corpus ne contient pas la réponse, E1) lève
+    `NotFoundInCorpusError(correlation_id)`, jamais un champ `found: false`
+    dans le dict. Une indisponibilité du backend lève
+    `BackendUnavailableError(correlation_id)`, jamais un champ d'erreur dans
+    le dict retourné.
     """
 
     async def answer(
         self, query: str, collections: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Réponse composite (citations + confidence) pour `answer_question`."""
+        ...
 
     async def search(
         self, query: str, top_k: int, collections: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Recherche hybride en langage naturel pour `search_documents`."""
+        ...
 
     async def lookup(
         self, product_ref: str, collections: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Lookup exact par référence produit pour `lookup_by_reference`."""
+        ...
 
     async def document_metadata(
         self, doc_id: str, collections: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Métadonnées d'un document pour `get_document_metadata`."""
+        ...
 
     async def confidence(
         self, query: str, collections: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Score de confiance seul pour `check_answer_confidence`."""
+        ...
 
     async def document_types(
         self, collections: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Catalogue des types de documents pour `list_document_types`."""
+        ...
 
 
 class Text2SqlPort(Protocol):
     """Génération seule de SQL lecture seule — n'exécute jamais. `tables`
     porte le périmètre autorisé résolu par la matrice, jamais choisi par
     l'appelant. `correlation_id` est propagé au backend de génération.
+
+    Retour : dict avec les clés propres à la génération (SQL généré,
+    explication...). Une implémentation stub place `source: "stub"` (spec
+    §9.2). Un SQL non générable au regard du schéma accessible lève
+    `SchemaMismatchError(correlation_id)` ; une indisponibilité du backend
+    lève `BackendUnavailableError(correlation_id)` ; jamais un champ d'erreur
+    dans le dict retourné.
     """
 
     async def generate_sql(
         self, question: str, profile: str, tables: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Génère du SQL lecture seule pour `ask_database` ; n'exécute jamais."""
+        ...
 
 
 class SqlExecutionPort(Protocol):
     """Exécution seule de SQL (déjà généré ou fourni tel quel), chaîne de
-    garde-fous et tools figés. `tables`/`masked_columns` portent le périmètre
+    garde-fous et tools figés.
+
+    Périmètre et masquage : `tables` (sur `run_sql`/`schema_info`) et
+    `masked_columns` (sur `run_sql`/`customer_orders`) portent le périmètre
     et le masquage résolus par la matrice pour le profil appelant, jamais
-    choisis par l'appelant. `correlation_id` est propagé au backend
-    d'exécution pour corréler les journaux (spec §8).
+    choisis par l'appelant ni par le backend (barrière 2, spec §4.2). Les
+    quatre méthodes qui ne portent pas `masked_columns` (`stock`,
+    `order_status`, `query_history`, et `tables` seul sur `schema_info`) sont
+    des tools **figés** dont le périmètre de colonnes est fixe et sans
+    colonne sensible applicable à ce tool — l'absence du paramètre signifie
+    « aucun masquage à transmettre ici », **jamais** « le backend décide » :
+    la matrice reste la seule autorité, `mcp` n'ayant simplement rien à
+    transmettre pour ces tools figés.
+
+    `profile: str`, présent sur toutes les méthodes, est une **étiquette
+    d'audit/journalisation** (par exemple pour que `sorabelsql-api` inscrive
+    le profil dans ses propres logs et les corrèle aux journaux de `mcp`) et
+    non une seconde source d'autorisation : la décision d'accès a déjà été
+    prise par la matrice avant l'appel au port ; le backend ne doit jamais
+    revalider ou élargir le périmètre à partir de `profile` seul.
+
+    `correlation_id` est propagé au backend d'exécution pour corréler les
+    journaux (spec §8).
+
+    Retour : dict avec les clés propres à l'endpoint (lignes, statut,
+    schéma...). Une implémentation stub place `source: "stub"` (spec §9.2).
+    Un SQL rejeté par les garde-fous (hors lecture seule, table non
+    autorisée au niveau du backend) lève `SchemaMismatchError(correlation_id)`
+    ; une indisponibilité du backend lève `BackendUnavailableError(correlation_id)`
+    ; jamais un champ d'erreur dans le dict retourné.
     """
 
     async def run_sql(
@@ -85,15 +146,19 @@ class SqlExecutionPort(Protocol):
         tables: Sequence[str],
         masked_columns: Sequence[str],
         correlation_id: str,
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Exécute un SQL déjà généré pour `run_sql_query`, garde-fous compris."""
+        ...
 
-    async def stock(
-        self, product_ref: str, profile: str, correlation_id: str
-    ) -> dict[str, Any]: ...
+    async def stock(self, product_ref: str, profile: str, correlation_id: str) -> dict[str, Any]:
+        """Tool figé `get_stock` : aucune colonne sensible à masquer sur ce périmètre."""
+        ...
 
     async def order_status(
         self, order_id: str, profile: str, correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Tool figé `get_order_status` : aucune colonne sensible à masquer sur ce périmètre."""
+        ...
 
     async def customer_orders(
         self,
@@ -102,12 +167,16 @@ class SqlExecutionPort(Protocol):
         profile: str,
         masked_columns: Sequence[str],
         correlation_id: str,
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Tool figé `get_customer_order_history`, avec masquage de colonnes (E5)."""
+        ...
 
     async def schema_info(
         self, profile: str, keyword: str | None, tables: Sequence[str], correlation_id: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Schéma commenté filtré par périmètre pour `get_schema_info`."""
+        ...
 
-    async def query_history(
-        self, profile: str, limit: int, correlation_id: str
-    ) -> dict[str, Any]: ...
+    async def query_history(self, profile: str, limit: int, correlation_id: str) -> dict[str, Any]:
+        """Tool figé `get_query_history` : aucune colonne sensible à masquer sur ce périmètre."""
+        ...
