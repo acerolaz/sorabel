@@ -96,6 +96,44 @@ async def test_un_404_devient_schema_mismatch() -> None:
         await client_avec(handler).answer("tension ?", ("collection-inconnue",), "corr")
 
 
+@pytest.mark.parametrize("statut", [401, 403, 429])
+async def test_un_refus_d_acces_n_est_pas_un_defaut_de_schema(statut: int) -> None:
+    """Un 4xx hors liste blanche reste une indisponibilité, corps signé ou non.
+
+    `.claude/rules/api-contracts.md` impose le corps `{error_code, message,
+    correlation_id}` à *toutes* les API de la solution : un 401/403 de
+    l'`api-gateway` — hub obligatoire de tous les flux (`../CLAUDE.md`) — en
+    porte donc un. Le seul `error_code` ne peut pas servir de discriminant ;
+    sans la liste blanche de statuts, le client MCP recevrait « Requête
+    invalide au regard du schéma accessible » pour un défaut d'autorisation.
+    """
+
+    # Arrange — un corps d'erreur parfaitement conforme, sur un statut d'accès
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            statut,
+            json={
+                "error_code": "UNAUTHORIZED",
+                "message": "Accès non autorisé pour ce profil",
+                "correlation_id": "corr",
+            },
+        )
+
+    # Act / Assert
+    with pytest.raises(BackendUnavailableError):
+        await client_avec(handler).answer("tension ?", ("manuel",), "corr")
+
+
+async def test_un_400_signale_par_le_backend_devient_schema_mismatch() -> None:
+    # Arrange — 400 fait partie de la liste blanche : un défaut de la requête
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error_code": "UNKNOWN_FIELD"})
+
+    # Act / Assert
+    with pytest.raises(SchemaMismatchError):
+        await client_avec(handler).answer("tension ?", ("manuel",), "corr")
+
+
 async def test_un_422_devient_backend_unavailable_pas_schema_mismatch() -> None:
     # Arrange — falsifiable : si l'adapter traitait tout 4xx comme
     # SchemaMismatchError, cette levée-ci échouerait

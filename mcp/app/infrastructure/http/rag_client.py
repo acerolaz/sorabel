@@ -14,18 +14,19 @@ Mapping statut HTTP -> erreur typée (arbitrage A, révisé en ronde de correcti
 - `>= 500` -> `BackendUnavailableError` : le backend a échoué à traiter une
   requête par ailleurs valide (ex : `EMBEDDING_SERVICE_ERROR` à 502 dans
   `rag-hybride/app/main.py`).
-- `4xx` avec un corps JSON portant un `error_code` -> `SchemaMismatchError` :
-  spec §7, « table/colonne inconnue **signalée par un backend** » — il faut
-  donc un signal explicite du backend, jamais un code de statut nu. Un 404
-  seul (ex : `RAG_BASE_URL` mal configurée) n'est **pas** un signal de
-  backend : FastAPI ne renvoie 404 que pour un chemin de route inconnu,
-  jamais pour une ressource métier sur `/api/v1/query` (qui ne reçoit même
-  pas de `collections`, cf. plus bas) ; le traiter en `SchemaMismatchError`
-  enverrait l'exploitant sur une fausse piste ("requête invalide au regard
-  du schéma") alors qu'il s'agit d'une erreur de configuration réseau.
-- autres `4xx` (sans `error_code`, ex : 422 de validation Pydantic, ou 404 de
-  route inconnue) -> `BackendUnavailableError`, documenté : ce sont des
-  échecs de requête ou de configuration, pas des refus de schéma signalés.
+- `400`, `404` ou `422` **et** un corps JSON portant un `error_code` ->
+  `SchemaMismatchError` : spec §7, « table/colonne inconnue **signalée par un
+  backend** ». Les deux conditions sont nécessaires. Le statut d'abord, parce
+  que `api-contracts.md` impose ce corps d'erreur à *toutes* les API de la
+  solution : « le backend a-t-il signalé quelque chose ? » ne discrimine donc
+  rien à lui seul, et un 401/403 émis par l'`api-gateway` — hub obligatoire de
+  tous les flux — serait rendu au client MCP en « Requête invalide au regard
+  du schéma accessible », un contresens complet. Ces trois statuts sont les
+  seuls qui puissent porter un défaut de la *requête* elle-même.
+- tout autre `4xx` (401, 403, 429...), ou l'un des trois ci-dessus sans
+  `error_code` -> `BackendUnavailableError`, documenté : refus d'accès,
+  quota, erreur de configuration réseau — rien qui décrive le schéma. Un
+  statut nu ne signale de toute façon rien (spec §7).
 
 Une exception `httpx` (timeout, DNS, connexion refusée, URL invalide) est
 elle aussi toujours convertie en `BackendUnavailableError` (arbitrage C) :
@@ -67,6 +68,12 @@ import httpx
 
 from app.domain.errors import BackendUnavailableError, NotFoundInCorpusError, SchemaMismatchError
 from app.infrastructure.stub.rag_stub import RagStub
+
+#: Statuts 4xx qui peuvent décrire un défaut de la *requête* — les seuls dont
+#: un `error_code` vaille signal de schéma (spec §7). Volontairement fermée :
+#: 401, 403 ou 429 portent eux aussi un corps `api-contracts.md`, sans rien
+#: dire du schéma accessible.
+STATUTS_DE_SCHEMA: frozenset[int] = frozenset({400, 404, 422})
 
 
 def _error_code_du_corps(reponse: httpx.Response) -> str | None:
@@ -158,11 +165,16 @@ class RagHttpClient:
             raise BackendUnavailableError(correlation_id)
         if reponse.status_code >= 400:
             # Spec §7 : `SCHEMA_MISMATCH` désigne une ressource inconnue
-            # **signalée par un backend**. Un statut nu ne signale rien — un 404
-            # de `rag-hybride` est un chemin de route inconnu, donc une erreur de
-            # configuration. Seul un `error_code` explicite dans le corps vaut
-            # signal ; tout le reste est une indisponibilité.
-            if _error_code_du_corps(reponse) is not None:
+            # **signalée par un backend**. Deux conditions, pas une : un statut
+            # de la liste blanche ci-dessus *et* un `error_code` explicite. Le
+            # seul `error_code` ne discrimine rien — `api-contracts.md` impose
+            # ce corps à toutes les API de la solution, `api-gateway` compris,
+            # dont un 401/403 se lirait alors « requête invalide au regard du
+            # schéma ». Tout le reste est une indisponibilité.
+            if (
+                reponse.status_code in STATUTS_DE_SCHEMA
+                and _error_code_du_corps(reponse) is not None
+            ):
                 raise SchemaMismatchError(correlation_id)
             raise BackendUnavailableError(correlation_id)
 
