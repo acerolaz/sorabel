@@ -80,11 +80,15 @@ def build_local_verifier(settings: Settings) -> LocalKeyTokenVerifier:
         raise UnsafeVerifierConfiguration("MCP_DEV_JWT_SECRET est vide")
     if not settings.mcp_jwt_issuer or not settings.mcp_jwt_audience:
         # Non demandé explicitement par la spec §5 pour cet adapter, mais du
-        # même ordre que les deux garde-fous ci-dessus : un `.env` tronqué ne
-        # doit pas démarrer silencieusement avec un émetteur/audience vide
-        # (PyJWT accepterait alors n'importe quel token portant `iss`/`aud`
-        # à chaîne vide). Le même trou existe côté JWKS (tâche 8, hors
-        # périmètre de cet adapter) : `mcp_jwks_url` n'est pas couvert ici.
+        # même ordre que les deux garde-fous ci-dessus : fail-fast contre un
+        # `.env` tronqué qui démarrerait silencieusement avec un émetteur ou
+        # une audience vide, plutôt qu'un mode dégradé découvert plus tard.
+        # Ce n'est pas la fermeture d'une brèche de sécurité : une audience
+        # vide fait déjà lever `MissingRequiredClaimError` à PyJWT sur tout
+        # token (`_validate_aud`), et un émetteur vide exige toujours une
+        # signature valide. Le même garde a vocation à être hissé dans
+        # `build_token_verifier` (tâche 8), où il vaudra aussi pour l'adapter
+        # JWKS — `mcp_jwks_url` n'est pas couvert ici.
         raise UnsafeVerifierConfiguration("MCP_JWT_ISSUER ou MCP_JWT_AUDIENCE est vide")
     return LocalKeyTokenVerifier(
         secret=settings.mcp_dev_jwt_secret,
