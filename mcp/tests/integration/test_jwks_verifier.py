@@ -137,6 +137,62 @@ def test_une_rotation_de_cle_est_prise_en_compte_apres_le_cache() -> None:
     assert serveur.appels > appels_avant_rotation
 
 
+def test_apres_expiration_du_cache_une_cle_revoquee_est_refusee() -> None:
+    """Direction dangereuse de la rotation : une clé retirée du JWKS (ex.
+    compromission) doit cesser d'être acceptée une fois le cache expiré —
+    pas seulement une nouvelle clé sous un nouveau `kid` acceptée (déjà
+    couvert par le test de rotation ci-dessus, direction inoffensive).
+    """
+    # Arrange — la clé A est publiée et acceptée une première fois
+    cle_a, jwks_a = paire_de_cles(kid="cle-a")
+    _, jwks_b = paire_de_cles(kid="cle-b")
+    with JwksServer(jwks_a) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        token_ancien = forge(cle_a, kid="cle-a")
+        verifier.verify(token_ancien)  # accepté tant que la clé A est publiée
+
+        # Act — la clé A est retirée du JWKS (révocation), et on force
+        # l'expiration du cache tier-1 (sans attendre les 5 minutes de TTL
+        # par défaut) pour simuler l'écoulement du temps après la révocation.
+        # Une durée de vie de 0 ne suffit pas toujours : `is_expired()`
+        # exige une comparaison strictement supérieure au timestamp de mise
+        # en cache, et le prochain appel peut retomber sur le même instant
+        # `monotonic()` ; une valeur négative (mais > -1, sentinelle
+        # « jamais expirer ») garantit un TTL déjà dépassé.
+        serveur.set_jwks(jwks_b)
+        verifier._client.jwk_set_cache.lifespan = -0.5  # type: ignore[union-attr]
+
+        # Assert — le même token, signé par une clé désormais révoquée,
+        # n'est plus accepté. Si le cache par `kid` (tier-2, sans expiration
+        # temporelle) était réactivé, `verifier` répondrait toujours depuis
+        # ce cache sans jamais retourner interroger le JWKS, et cette
+        # assertion échouerait.
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(token_ancien)
+
+
+def test_une_signature_falsifiee_sous_un_kid_valide_est_refusee() -> None:
+    """Isole la vérification cryptographique elle-même, pas la résolution du
+    `kid`. Le token est signé par une clé privée qui n'est pas celle du
+    JWKS, mais revendique le `kid` réellement publié : la résolution du
+    `kid` réussit (elle trouve la vraie clé publique), donc seule la
+    comparaison de signature dans `jwt.decode` peut faire échouer ce test.
+    Si `jwt.decode` était appelé avec `options={"verify_signature": False}`,
+    ce test échouerait — les claims sont par ailleurs entièrement valides.
+    """
+    # Arrange — le JWKS publie la clé légitime sous "cle-legitime" ; le
+    # token est forgé avec une tout autre clé privée, sous ce même kid.
+    _, jwks = paire_de_cles(kid="cle-legitime")
+    cle_attaquant, _ = paire_de_cles(kid="cle-legitime")
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        faux = forge(cle_attaquant, kid="cle-legitime")
+
+        # Act / Assert
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(faux)
+
+
 def test_une_cle_inconnue_est_refusee() -> None:
     # Arrange — le token est signé par une clé absente du JWKS servi, avec
     # un payload par ailleurs entièrement valide : le rejet ne peut donc
@@ -159,6 +215,111 @@ def test_un_jwks_injoignable_refuse_le_token() -> None:
     # Act / Assert — jamais d'acceptation par défaut quand l'IdP est muet
     with pytest.raises(InvalidTokenError):
         verifier.verify(forge(cle))
+
+
+def test_un_mauvais_emetteur_est_refuse() -> None:
+    # Arrange — payload par ailleurs valide, seul `iss` diffère.
+    cle, jwks = paire_de_cles()
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        mauvais_emetteur = forge(cle, iss="https://attaquant.test/realms/autre")
+
+        # Act / Assert
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(mauvais_emetteur)
+
+
+def test_une_mauvaise_audience_est_refusee() -> None:
+    # Arrange — payload par ailleurs valide, seule `aud` diffère.
+    cle, jwks = paire_de_cles()
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        mauvaise_audience = forge(cle, aud="autre-service")
+
+        # Act / Assert
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(mauvaise_audience)
+
+
+def test_un_token_expire_est_refuse() -> None:
+    # Arrange — payload par ailleurs valide, seule `exp` est passée.
+    cle, jwks = paire_de_cles()
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        expire = forge(cle, exp=datetime.now(timezone.utc) - timedelta(seconds=1))
+
+        # Act / Assert
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(expire)
+
+
+def test_un_claim_de_profil_absent_est_refuse() -> None:
+    # Arrange — token par ailleurs valide (signature, iss, aud, exp), mais
+    # sans le claim `sorabel_profile`.
+    cle, jwks = paire_de_cles()
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        sans_profil = jwt.encode(
+            {
+                "sub": "bot-slack-support",
+                "iss": ISSUER,
+                "aud": AUDIENCE,
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            },
+            cle,
+            algorithm="RS256",
+            headers={"kid": "cle-test"},
+        )
+
+        # Act / Assert
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(sans_profil)
+
+
+def test_un_claim_de_sujet_absent_est_refuse() -> None:
+    # Arrange — token par ailleurs valide, `sorabel_profile` présent, mais
+    # sans `sub` : branche symétrique du garde combiné ci-dessus.
+    cle, jwks = paire_de_cles()
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        sans_sujet = jwt.encode(
+            {
+                "sorabel_profile": "support",
+                "iss": ISSUER,
+                "aud": AUDIENCE,
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            },
+            cle,
+            algorithm="RS256",
+            headers={"kid": "cle-test"},
+        )
+
+        # Act / Assert
+        with pytest.raises(InvalidTokenError):
+            verifier.verify(sans_sujet)
+
+
+def test_les_messages_de_rejet_sont_indistinguables() -> None:
+    """Les causes de rejet cryptographiques/de claims ne doivent jamais être
+    distinguables à la lecture du message — même discipline que la tâche 7.
+    """
+    # Arrange
+    cle, jwks = paire_de_cles(kid="cle-legitime")
+    cle_attaquant, _ = paire_de_cles(kid="cle-legitime")
+    with JwksServer(jwks) as serveur:
+        verifier = JwksTokenVerifier(serveur.url, ISSUER, AUDIENCE, timeout_s=5.0)
+        tokens_invalides = [
+            forge(cle_attaquant, kid="cle-legitime"),  # signature falsifiée
+            forge(cle, iss="https://attaquant.test/realms/autre"),  # mauvais émetteur
+            forge(cle, aud="autre-service"),  # mauvaise audience
+            forge(cle, exp=datetime.now(timezone.utc) - timedelta(seconds=1)),  # expiré
+        ]
+
+        # Act / Assert
+        for token in tokens_invalides:
+            with pytest.raises(InvalidTokenError) as excinfo:
+                verifier.verify(token)
+            assert str(excinfo.value) == "token invalide"
 
 
 def test_build_token_verifier_refuse_emetteur_ou_audience_vide() -> None:

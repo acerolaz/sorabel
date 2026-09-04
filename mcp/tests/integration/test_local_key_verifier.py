@@ -218,10 +218,3 @@ def test_un_secret_vide_empeche_le_demarrage() -> None:
     # Act / Assert
     with pytest.raises(UnsafeVerifierConfiguration, match="MCP_DEV_JWT_SECRET"):
         build_local_verifier(settings)
-
-
-# Le garde-fou "MCP_JWT_ISSUER/MCP_JWT_AUDIENCE vide" a été hissé dans
-# `build_token_verifier` (tâche 8) : il vaut pour les deux adapters et n'est
-# plus dupliqué ici. Ses tests vivent désormais dans
-# `tests/integration/test_jwks_verifier.py`
-# (`test_build_token_verifier_refuse_emetteur_ou_audience_vide`).
