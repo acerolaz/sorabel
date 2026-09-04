@@ -12,9 +12,9 @@ une requête SQL candidate, et la retourne telle quelle sans l'exécuter. Cette 
 génération/exécution donne un point d'inspection entre l'étape probabiliste (LLM) et
 l'étape gouvernée (chaîne de garde-fous de `sorabelsql-api`).
 
-Ce rôle correspond à l'**Agent Text-to-SQL** cadré dans [`Text2SQL_Sorabel.md`](./Text2SQL_Sorabel.md)
+Ce rôle correspond à l'**Agent Text-to-SQL** cadré dans [`Text2SQL_Sorabel.md`](../docs/architecture/Text2SQL_Sorabel.md)
 (évaluation du schéma, prompt, garde-fous, boucle d'auto-correction), et il est appelé
-exclusivement par le tool MCP `ask_database`, documenté dans [`MCP.md`](./MCP.md) (§2 et
+exclusivement par le tool MCP `ask_database`, documenté dans [`MCP.md`](../docs/architecture/MCP.md) (§2 et
 §6.3 du catalogue de tools).
 
 ## 2. Ce que `text2sql-ai` ne fait pas
@@ -22,7 +22,7 @@ exclusivement par le tool MCP `ask_database`, documenté dans [`MCP.md`](./MCP.m
 - Pas d'exécution SQL — jamais de connexion à PostgreSQL.
 - Pas de garde-fous d'exécution (rôle DB read-only, AST, `LIMIT`, timeout) — portés par
   [`sorabelsql-api`](../sorabelsql-api/README.md), détaillés au §5 de
-  [`Text2SQL_Sorabel.md`](./Text2SQL_Sorabel.md).
+  [`Text2SQL_Sorabel.md`](../docs/architecture/Text2SQL_Sorabel.md).
 
 ## 3. Stack technique
 
@@ -30,7 +30,7 @@ exclusivement par le tool MCP `ask_database`, documenté dans [`MCP.md`](./MCP.m
   de la solution)
 - Exposé via une interface **FastAPI**, accessible uniquement via l'API Gateway —
   jamais appelé directement par un client MCP (cf. glossaire de
-  [`MCP.md`](./MCP.md), entrée « Agent Text-to-SQL »)
+  [`MCP.md`](../docs/architecture/MCP.md), entrée « Agent Text-to-SQL »)
 
 ## 4. Exigences servies
 
@@ -41,8 +41,8 @@ gouvernée est portée par `sorabelsql-api`.
 
 | Document | Contenu |
 |---|---|
-| [`Text2SQL_Sorabel.md`](./Text2SQL_Sorabel.md) | Cadrage complet du module Text-to-SQL (E3, E5) : évaluation du schéma, prompt, garde-fous, auto-correction |
-| [`MCP.md`](./MCP.md) | Cadrage du serveur MCP Sorabel Data Gateway ; §2 et §6.3 documentent le tool `ask_database`, seul appelant de cet agent |
+| [`Text2SQL_Sorabel.md`](../docs/architecture/Text2SQL_Sorabel.md) | Cadrage complet du module Text-to-SQL (E3, E5) : évaluation du schéma, prompt, garde-fous, auto-correction |
+| [`MCP.md`](../docs/architecture/MCP.md) | Cadrage du serveur MCP Sorabel Data Gateway ; §2 et §6.3 documentent le tool `ask_database`, seul appelant de cet agent |
 | [`sorabelsql-api`](../sorabelsql-api/README.md) | Service d'exécution SQL gouvernée, destinataire du SQL généré ici |
 
 ```mermaid
