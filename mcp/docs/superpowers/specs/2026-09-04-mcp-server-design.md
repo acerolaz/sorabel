@@ -75,7 +75,11 @@ mcp/
 │   │   └── schemas/                # DTO Pydantic d'entrée/sortie
 │   ├── config.py
 │   └── dependencies.py             # câblage ports -> adapters selon la configuration
-└── tests/{unit,test_tools}/
+└── tests/
+    ├── unit/          # domain/ + application/ + adapters isolés, aucun I/O
+    ├── integration/    # adapters contre une vraie dépendance (serveur HTTP, fichiers)
+    ├── acceptance/     # scénarios de bout en bout par persona, via un vrai client MCP
+    └── conftest.py
 ```
 
 ### 4.1 Pas de use case par tool
@@ -264,23 +268,75 @@ d'exécution.
 
 ## 11. Tests
 
-Découpage calqué sur `rag-hybride` : `tests/unit/` (domaine, application, adapters) et
-`tests/test_tools/` (app ASGI appelée via `httpx`). Pas de répertoire `integration/` : ni
-base, ni migration, ni backend réel disponible. Implémentation en TDD.
+Trois niveaux, dans l'esprit de `rag-hybride/.claude/rules/testing-pytest.md` (convention
+Arrange / Act / Assert, ports mockés en unitaire seulement). Implémentation en TDD :
+test rouge avant chaque bloc.
+
+| Niveau | Répertoire | Ce qui est réel | Ce qui est doublé |
+|---|---|---|---|
+| Unitaire | `tests/unit/` | domaine, use cases, logique d'un adapter | tous les ports ; transport `httpx` simulé |
+| Intégration | `tests/integration/` | vrai serveur HTTP, vrai socket, vrai système de fichiers | le service distant (doublure de contrat) |
+| Acceptance | `tests/acceptance/` | l'application assemblée, protocole MCP compris | les backends, par leurs adapters stub |
+
+### 11.1 Unitaires — `tests/unit/`
+
+Domaine et application avec faux ports, aucun I/O. C'est là que vivent les règles.
 
 | Test | Ce qu'il verrouille |
 |---|---|
-| Exhaustivité tools ↔ catalogue ↔ YAML | Un tool ajouté sans ligne de matrice fait échouer la CI |
+| Exhaustivité tools ↔ catalogue ↔ YAML | Un tool ajouté sans ligne de matrice fait échouer la CI — contrepartie de D7 |
 | Grille 3 profils × 13 tools | Les 39 décisions de `MCP.md` §6.4, en table de données |
-| `list_tools` par profil | `support` → 5 tools, `sales` → 10, `dev` → 7, et rien d'autre |
-| Refus avant dispatch | `isError` + `UNAUTHORIZED_TOOL`, **et** le port backend n'est jamais appelé |
-| Sans token | `list_tools` vide, `call_tool` → `UNAUTHENTICATED`, les deux journalisés |
-| Token invalide | Expiré, mauvais `iss`/`aud`, signature fausse ; démarrage refusé si verifier `local` hors `dev` ou secret vide |
-| Refus de corpus (E1) | `refused` → `NOT_FOUND_IN_CORPUS`, et le texte généré par `rag-hybride` n'apparaît nulle part dans le résultat |
-| Audit (E5) | Une entrée par appel autorisé et par appel refusé, champs obligatoires présents, aucune ligne de résultat dans le journal |
-| Périmètre (barrière 2) | Collection hors matrice → `UNAUTHORIZED_COLLECTION` ; le périmètre transmis vient de la matrice |
+| Fail closed | Profil inconnu, claim absent, tool hors catalogue → refus, jamais un défaut permissif |
+| Refus avant dispatch | `isError` + `UNAUTHORIZED_TOOL`, **et** le faux port backend enregistre zéro appel |
+| Périmètre (barrière 2) | Collection hors matrice → `UNAUTHORIZED_COLLECTION` ; le périmètre transmis au port vient de la matrice, pas de l'appelant |
+| Composite | `answer_question` appelle les 3 méthodes du port une fois chacune et propage le `correlation_id` |
+| Audit (E5) | Une entrée par appel autorisé et par appel refusé, champs obligatoires présents, et aucune ligne de résultat dans le journal — seul `row_count` |
 | Adapter HTTP RAG | Transport `httpx` simulé : 200 → citations, `refused` → `NOT_FOUND_IN_CORPUS`, 5xx → `BACKEND_UNAVAILABLE` |
-| Composite | `answer_question` appelle les 3 ports une fois chacun et propage le `correlation_id` |
+| Docstrings | Les 13 tools ont une docstring non vide |
+| Délégations stub | Les méthodes encore déléguées au stub par l'adapter HTTP sont exactement la liste attendue (§9.1) |
+
+### 11.2 Intégration — `tests/integration/`
+
+Les adapters d'infrastructure contre une dépendance **réellement** exercée. Pas de
+Testcontainers ici — ce projet n'a ni base ni migration ; ce qu'il a de réel à éprouver,
+c'est du réseau, de la cryptographie et des fichiers.
+
+| Test | Dépendance réelle |
+|---|---|
+| `RagHttpClient` contre un serveur HTTP éphémère | Un `uvicorn` sur port libre sert une doublure du contrat `rag-hybride` : 200, `refused`, 500, timeout, connexion refusée — vrai socket, vrai `httpx`, vrais délais |
+| Propagation du `correlation_id` | L'en-tête est réellement reçu par le serveur distant |
+| `JwksTokenVerifier` contre un JWKS servi en HTTP | Paire RSA générée dans le test, JWKS réel : signature valide, clé inconnue, rotation de clé, cache respecté (un seul appel réseau pour deux vérifications) |
+| `LocalKeyTokenVerifier` | Token expiré, `iss`/`aud` faux, signature fausse ; démarrage refusé si verifier `local` hors `dev`, ou secret vide |
+| `YamlAccessMatrixLoader` | Chargement du vrai `access_matrix.yaml` du dépôt, puis d'un fichier malformé → échec au démarrage, pas de matrice vide silencieuse |
+| Cross-projet, opt-in | Marqué `@pytest.mark.live`, sauté par défaut : tape le vrai `rag-hybride` si `RAG_BASE_URL` répond — seul point de vérification réelle entre les deux projets |
+
+> Pourquoi une doublure de contrat plutôt que l'application `rag-hybride` importée dans le
+> test : les deux projets exposent chacun un paquet de premier niveau `app`, et les
+> importer dans le même processus est exactement la collision décrite dans
+> `../CLAUDE.md` § Commandes. La doublure est servie par un vrai serveur HTTP, ce qui
+> laisse le test exercer le transport pour de bon.
+
+Deux points d'outillage : le marqueur `live` est déclaré dans la section pytest du
+`pyproject.toml` racine (un marqueur non déclaré devient un avertissement, puis une
+erreur en mode strict), et la génération de la paire RSA du test JWKS s'appuie sur
+`cryptography`, déjà tiré par `pyjwt[crypto]` (§10). `uvicorn` est déjà une dépendance
+principale de la solution.
+
+### 11.3 Acceptance — `tests/acceptance/`
+
+Scénarios de bout en bout, un par persona de `MCP.md`, joués à travers un **vrai client
+MCP** (session du SDK sur le transport HTTP streamable) contre l'application assemblée par
+`dependencies.py` — aucun accès aux objets internes, aucun monkeypatch : ce que voit le
+test est ce que verra le bot Slack.
+
+| Scénario | Exigence |
+|---|---|
+| Bot Slack support : `list_tools` renvoie exactement 5 tools ; `get_customer_order_history` répond `UNAUTHORIZED_TOOL` ; deux entrées d'audit, une `allow` une `deny` | E4, E5 |
+| Poste de vente : `answer_question` renvoie des citations exploitables, et le texte généré par `rag-hybride` n'apparaît nulle part dans la réponse | E1, E4 |
+| IDE développeur : `run_sql_query` autorisé ; `ask_database` absent du catalogue *et* refusé s'il est appelé quand même — l'invisibilité n'est pas la seule protection | E3, E4 |
+| Question hors corpus : `isError` + `NOT_FOUND_IN_CORPUS`, jamais une réponse rédigée | E1 |
+| Appel sans token : catalogue vide, `call_tool` → `UNAUTHENTICATED`, les deux journalisés | E5 |
+| Backend injoignable : `BACKEND_UNAVAILABLE` typé, pas de trace d'exception remontée au client | E5 |
 
 ## 12. Écarts relevés dans les documents sources
 
@@ -298,7 +354,9 @@ base, ni migration, ni backend réel disponible. Implémentation en TDD.
 Tous dans `mcp/` — une PR, un scope (`.claude/rules/git-conventions.md`) :
 
 - `app/` complet et `access_matrix.yaml` ;
-- la suite de tests du §11 ;
+- les trois niveaux de tests du §11 (`unit/`, `integration/`, `acceptance/`) ;
+- `.claude/rules/testing-pytest.md` local au projet, calqué sur celui de `rag-hybride` mais
+  décrivant les trois niveaux retenus ici, et référencé depuis `mcp/CLAUDE.md` ;
 - `README.md` mis à jour : 13 tools, `ask_database`/`run_sql_query`, matrice de `MCP.md` §6.4 ;
 - `.claude/rules/mcp-primitives.md` : le TODO remplacé par le format de la matrice et la convention de docstring ;
 - `.claude/commands/new-tool.md` : squelette scaffoldant fonction + entrée de matrice + entrée de catalogue ;
