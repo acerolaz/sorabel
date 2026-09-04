@@ -89,8 +89,46 @@ def test_un_fichier_malforme_echoue_au_chargement(tmp_path: Path) -> None:
 
 
 def test_un_fichier_absent_echoue_au_chargement(tmp_path: Path) -> None:
+    # Arrange
+    fichier_absent = tmp_path / "inexistant.yaml"
+
+    # Act / Assert
     with pytest.raises(InvalidMatrixError):
-        load_access_matrix(tmp_path / "inexistant.yaml")
+        load_access_matrix(fichier_absent)
+
+
+def test_une_matrice_sans_aucun_profil_echoue_au_chargement(tmp_path: Path) -> None:
+    """`profiles: {}` est structurellement valide (un mapping vide) mais
+    revient à démarrer sans aucune politique — le mode de défaillance
+    silencieux que la spec §11.2 interdit explicitement."""
+    # Arrange
+    fichier = tmp_path / "matrice.yaml"
+    fichier.write_text("version: 1\nprofiles: {}\n", "utf-8")
+
+    # Act / Assert — jamais de matrice vide silencieuse
+    with pytest.raises(InvalidMatrixError):
+        load_access_matrix(fichier)
+
+
+def test_un_profil_sans_aucun_tool_echoue_au_chargement(tmp_path: Path) -> None:
+    """`tools: []` est une liste de chaînes valide mais amputerait le profil
+    de tout droit sans qu'aucune validation ne le signale."""
+    # Arrange
+    fichier = tmp_path / "matrice.yaml"
+    fichier.write_text(
+        "version: 1\n"
+        "profiles:\n"
+        "  support:\n"
+        "    tools: []\n"
+        "    rag_collections: [manuel]\n"
+        "    sql_tables: [products]\n"
+        "    masked_columns: []\n",
+        "utf-8",
+    )
+
+    # Act / Assert — jamais de profil sans aucun droit, silencieusement
+    with pytest.raises(InvalidMatrixError):
+        load_access_matrix(fichier)
 
 
 @pytest.mark.parametrize("profil", ["support", "sales", "dev"])
@@ -107,9 +145,16 @@ def test_la_matrice_reelle_correspond_exactement_a_la_spec_section_6(profil: str
     tools = matrix.tools_for(profil)
     decision = matrix.decide(profil, tools[0])
 
-    # Assert — tools accordés (l'ordre suit le catalogue, on compare en set)
+    # Assert — tools accordés, projection filtrée par le catalogue
+    # (l'ordre suit le catalogue, on compare en set)
     assert set(tools) == set(attendu["tools"])
     assert len(tools) == len(attendu["tools"])
+
+    # Assert — l'entrée brute du profil (non projetée par le catalogue) :
+    # un tool hors catalogue ajouté au fichier serait effacé par
+    # `tools_for` avant la comparaison ci-dessus et passerait inaperçu ;
+    # cette assertion lit directement `profiles[profil].tools`.
+    assert set(matrix.profiles[profil].tools) == set(attendu["tools"])
 
     # Assert — périmètre de données du profil
     assert isinstance(decision, Allowed)
