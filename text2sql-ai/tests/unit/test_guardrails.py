@@ -71,3 +71,15 @@ def test_validate_runs_blocklist_before_ast():
 
 def test_validate_returns_none_for_valid_sql():
     assert validate("SELECT quantity FROM stock", [STOCK_TABLE]) is None
+
+
+def test_ast_accepts_benign_cte():
+    sql = "WITH x AS (SELECT quantity FROM stock) SELECT * FROM x"
+
+    assert check_ast(sql, [STOCK_TABLE]) is None
+
+
+def test_ast_rejects_cte_reading_unauthorized_table():
+    sql = "WITH x AS (SELECT * FROM products) SELECT * FROM x"
+
+    assert check_ast(sql, [STOCK_TABLE]) is not None

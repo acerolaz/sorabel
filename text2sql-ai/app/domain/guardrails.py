@@ -43,6 +43,9 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
     Heuristic: an unqualified column is checked against the union of all allowed
     tables' columns, not validated per-table — acceptable for MVP's single-table-heavy
     query shapes; a later iteration can tighten this with join-aware resolution.
+
+    CTE aliases are excluded from table authorization checks since they are not
+    references to real tables but to subqueries defined in the same statement.
     """
     try:
         statements = [s for s in sqlglot.parse(sql, dialect="postgres") if s is not None]
@@ -66,8 +69,16 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
     allowed_columns = {(t.name.lower(), c.name.lower()) for t in allowed_tables for c in t.columns}
     allowed_column_names = {c.name.lower() for t in allowed_tables for c in t.columns}
 
+    # Collect CTE alias names defined in this statement to exclude them from
+    # table authorization checks (they are not references to real tables).
+    cte_alias_names = {cte.alias.lower() for cte in statement.find_all(exp.CTE)}
+
     for table_expr in statement.find_all(exp.Table):
-        if table_expr.name.lower() not in allowed_table_names:
+        table_name = table_expr.name.lower()
+        # Skip CTE aliases — they are valid references to CTEs defined in this query.
+        if table_name in cte_alias_names:
+            continue
+        if table_name not in allowed_table_names:
             return GuardrailViolation(
                 rule="ast",
                 reason=f"Table non autorisée référencée : {table_expr.name}",
@@ -76,6 +87,10 @@ def check_ast(sql: str, allowed_tables: list[SchemaTable]) -> GuardrailViolation
     for column_expr in statement.find_all(exp.Column):
         column_name = column_expr.name.lower()
         table_hint = column_expr.table.lower() if column_expr.table else None
+        # If the column is qualified by a CTE alias, skip validation (the CTE itself
+        # is valid, so its columns must be valid too).
+        if table_hint and table_hint in cte_alias_names:
+            continue
         if table_hint:
             if (table_hint, column_name) not in allowed_columns:
                 return GuardrailViolation(
