@@ -1,6 +1,6 @@
 import pytest
 from app.domain.access_matrix import AccessMatrix, ProfileEntry
-from app.domain.catalog import CATALOG
+from app.domain.catalog import CATALOG, ToolDescriptor
 from app.domain.models import Allowed, Denied, Scope
 
 TOUTES_COLLECTIONS = ("datasheet", "manuel", "procedure_sav")
@@ -62,7 +62,9 @@ def matrix() -> AccessMatrix:
 
 @pytest.mark.parametrize("profile", ["support", "sales", "dev"])
 @pytest.mark.parametrize("descriptor", CATALOG, ids=lambda d: d.name)
-def test_grille_complete_profil_par_tool(matrix, profile, descriptor):
+def test_grille_complete_profil_par_tool(
+    matrix: AccessMatrix, profile: str, descriptor: ToolDescriptor
+) -> None:
     # Act
     decision = matrix.decide(profile, descriptor.name)
 
@@ -75,23 +77,83 @@ def test_grille_complete_profil_par_tool(matrix, profile, descriptor):
         assert decision.error_code == "UNAUTHORIZED_TOOL"
 
 
-def test_les_effectifs_de_catalogue_par_profil(matrix):
+def test_scope_restreint_de_support_exclut_datasheet(matrix: AccessMatrix) -> None:
+    # Act — support n'a accès qu'au SAV et au manuel, jamais aux fiches produit
+    decision = matrix.decide("support", "search_documents")
+
+    # Assert — comparaison à des valeurs en dur, pas à l'objet interne de la matrice
+    assert isinstance(decision, Allowed)
+    assert decision.scope.rag_collections == ("procedure_sav", "manuel")
+    assert "datasheet" not in decision.scope.rag_collections
+
+
+def test_les_effectifs_de_catalogue_par_profil(matrix: AccessMatrix) -> None:
+    # Assert
     assert len(matrix.tools_for("support")) == 5
     assert len(matrix.tools_for("sales")) == 10
     assert len(matrix.tools_for("dev")) == 7
 
 
-def test_profil_inconnu_refuse_tout(matrix):
+def test_le_contenu_de_tools_for_est_exact_et_dans_l_ordre_du_catalogue(
+    matrix: AccessMatrix,
+) -> None:
+    # Assert — noms exacts et ordre catalogue (pas seulement des effectifs),
+    # car tools_for alimente directement la barrière 1 (list_tools).
+    assert matrix.tools_for("support") == (
+        "search_documents",
+        "lookup_by_reference",
+        "ask_database",
+        "get_stock",
+        "get_order_status",
+    )
+    assert matrix.tools_for("sales") == (
+        "answer_question",
+        "search_documents",
+        "lookup_by_reference",
+        "get_document_metadata",
+        "check_answer_confidence",
+        "list_document_types",
+        "ask_database",
+        "get_stock",
+        "get_order_status",
+        "get_customer_order_history",
+    )
+    assert matrix.tools_for("dev") == (
+        "search_documents",
+        "get_document_metadata",
+        "check_answer_confidence",
+        "list_document_types",
+        "run_sql_query",
+        "get_schema_info",
+        "get_query_history",
+    )
+
+
+def test_profil_inconnu_refuse_tout(matrix: AccessMatrix) -> None:
+    # Act / Assert
     assert isinstance(matrix.decide("marketing", "get_stock"), Denied)
     assert matrix.tools_for("marketing") == ()
 
 
-def test_profil_absent_refuse_tout(matrix):
+def test_profil_absent_refuse_tout(matrix: AccessMatrix) -> None:
+    # Act / Assert
     assert isinstance(matrix.decide(None, "get_stock"), Denied)
     assert matrix.tools_for(None) == ()
 
 
-def test_tool_hors_catalogue_refuse_meme_si_present_dans_la_matrice():
+def test_profil_chaine_vide_refuse_tout(matrix: AccessMatrix) -> None:
+    # Arrange / Act — cas limite : chaîne vide, distincte de None, jamais déclarée
+    # dans la matrice ; vérifie que le "is None" de decide() n'est pas un test
+    # de vérité (une chaîne vide est falsy en Python) mais une vraie identité.
+    decision = matrix.decide("", "get_stock")
+
+    # Assert
+    assert isinstance(decision, Denied)
+    assert decision.rule == "fail_closed:profile_unknown"
+    assert matrix.tools_for("") == ()
+
+
+def test_tool_hors_catalogue_refuse_meme_si_present_dans_la_matrice() -> None:
     # Arrange — une matrice qui accorde un tool inexistant
     matrix = AccessMatrix(
         version=1,
@@ -103,8 +165,11 @@ def test_tool_hors_catalogue_refuse_meme_si_present_dans_la_matrice():
         },
     )
 
-    # Act / Assert — le catalogue fait autorité, pas le YAML
-    assert isinstance(matrix.decide("support", "drop_everything"), Denied)
+    # Act
+    decision = matrix.decide("support", "drop_everything")
+
+    # Assert — le catalogue fait autorité, pas le YAML
+    assert isinstance(decision, Denied)
 
 
 # --- Convention de nommage des `rule` (ruling C8) ---
@@ -116,7 +181,7 @@ def test_tool_hors_catalogue_refuse_meme_si_present_dans_la_matrice():
 # vérifiée explicitement, valeur par valeur.
 
 
-def test_rule_autorisee_identifie_le_profil_et_le_tool_accordes(matrix):
+def test_rule_autorisee_identifie_le_profil_et_le_tool_accordes(matrix: AccessMatrix) -> None:
     # Act
     decision = matrix.decide("support", "get_stock")
 
@@ -125,7 +190,7 @@ def test_rule_autorisee_identifie_le_profil_et_le_tool_accordes(matrix):
     assert decision.rule == "matrix:support:get_stock"
 
 
-def test_rule_refusee_profil_absent_a_une_rule_fail_closed_dediee(matrix):
+def test_rule_refusee_profil_absent_a_une_rule_fail_closed_dediee(matrix: AccessMatrix) -> None:
     # Act
     decision = matrix.decide(None, "get_stock")
 
@@ -134,7 +199,7 @@ def test_rule_refusee_profil_absent_a_une_rule_fail_closed_dediee(matrix):
     assert decision.rule == "fail_closed:profile_missing"
 
 
-def test_rule_refusee_profil_inconnu_a_une_rule_fail_closed_dediee(matrix):
+def test_rule_refusee_profil_inconnu_a_une_rule_fail_closed_dediee(matrix: AccessMatrix) -> None:
     # Act
     decision = matrix.decide("marketing", "get_stock")
 
@@ -143,7 +208,9 @@ def test_rule_refusee_profil_inconnu_a_une_rule_fail_closed_dediee(matrix):
     assert decision.rule == "fail_closed:profile_unknown"
 
 
-def test_rule_refusee_tool_hors_catalogue_a_une_rule_fail_closed_dediee(matrix):
+def test_rule_refusee_tool_hors_catalogue_a_une_rule_fail_closed_dediee(
+    matrix: AccessMatrix,
+) -> None:
     # Act
     decision = matrix.decide("support", "drop_everything")
 
@@ -152,7 +219,7 @@ def test_rule_refusee_tool_hors_catalogue_a_une_rule_fail_closed_dediee(matrix):
     assert decision.rule == "fail_closed:tool_unknown"
 
 
-def test_rule_refusee_tool_non_accorde_identifie_profil_et_tool(matrix):
+def test_rule_refusee_tool_non_accorde_identifie_profil_et_tool(matrix: AccessMatrix) -> None:
     # Act — tool réel du catalogue, mais hors du périmètre de "support"
     decision = matrix.decide("support", "run_sql_query")
 
