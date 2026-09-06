@@ -67,7 +67,7 @@ Chaque étape peut rejeter la requête : la réponse est alors une erreur struct
 | Langage / Framework | C# / ASP.NET Core |
 | Architecture | Clean Architecture (Domain → Application → Infrastructure → API) |
 | Base de données | PostgreSQL, réplica dédié en lecture seule |
-| Conteneurisation | `Dockerfile` + `docker compose` (API + PostgreSQL) |
+| Conteneurisation | À implémenter : ajouter `Dockerfile` + configuration `docker compose` (actuellement absent dans ce dossier) |
 | Build/test | `Makefile` — cibles standardisées communes au monorepo |
 
 ---
