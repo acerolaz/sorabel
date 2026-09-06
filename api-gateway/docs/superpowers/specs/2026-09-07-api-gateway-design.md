@@ -340,7 +340,7 @@ Le test « backend répondant 403 → relayé verbatim » est le garde-fou de r�
 - [ ] `make build && make test && make lint` passent.
 - [ ] `make test-e2e` passe.
 - [ ] `make docker-build && make docker-up` réussissent ; `/health` répond.
-- [ ] Les 6 routes du §3 sont déclarées et couvertes par un test de niveau 3.
+- [ ] Les 6 routes proxifiées du §3 (hors `/health`) sont déclarées et couvertes par un test de niveau 3.
 - [ ] Aucune ligne de code ne lit, décode ou interprète un claim JWT, un rôle, ou la matrice
       RBAC. Vérifiable par recherche sur `Authorization`, `claim`, `role`, `profile`.
 - [ ] Aucun test ne démontre qu'une requête cliente peut produire deux exécutions backend.
