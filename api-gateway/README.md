@@ -1,37 +1,78 @@
 # api-gateway
 
-> Hub de routage pur (analogie YARP/Ocelot) pour tous les flux de la solution Sorabel,
-> y compris les appels *internes* émis par [`mcp`](../mcp/README.md) vers ses backends.
-> Ne porte **aucune logique d'autorisation** : la matrice d'accès (profil × tool ×
-> collections/tables) est entièrement portée par `mcp`.
+Hub de routage pur pour la solution **Sorabel Data Gateway**. Analogie .NET : un reverse-proxy
+type **YARP/Ocelot**, positionné en hub central — pas un `[Authorize]`, juste un `DelegatingHandler`
+géant devant tous les backends.
 
-## 1. Rôle
+## Rôle dans l'architecture
 
-`api-gateway` relaie les requêtes entre les clients (bot Slack support, poste de vente,
-IDE développeur), [`sorabel-idp`](../sorabel-idp/README.md) (authentification), `mcp`
-(catalogue de tools) et les backends internes (`rag-hybride`, `text2sql-ai`,
-[`sorabelsql-api`](../sorabelsql-api/README.md)) — sans jamais inspecter ni décider des
-droits d'accès.
+`api-gateway` est le **seul** point d'entrée/sortie de la solution : tout flux client, et tout
+flux interne entre services, y transite. Il ne décide jamais *qui a le droit de faire quoi* —
+il décide seulement *par où ça passe*.
 
-> Analogie : un reverse proxy applicatif (YARP/Ocelot) — routage, relais transparent du
-> Bearer JWT, pas de policy `[Authorize]` évaluée ici.
+```mermaid
+flowchart LR
+    Client(["Client / Bot"]) --> GW[["api-gateway<br/>routage pur, sans RBAC"]]
 
-## 2. Ce que `api-gateway` ne fait pas
+    GW --> IDP["sorabel-idp<br/>(Keycloak — authn/JWT)"]
+    GW --> MCP["mcp<br/>(matrice RBAC, tools)"]
+    GW --> T2SQL["text2sql-ai<br/>(génération SQL, lecture seule)"]
+    GW --> SQLAPI["sorabelsql-api<br/>(exécution SQL, tools figés)"]
+    GW --> RAG["rag-hybride<br/>(retrieval hybride)"]
 
-- Pas de vérification JWT/JWKS — relayée telle quelle, vérifiée par `mcp`.
-- Pas de matrice d'accès dupliquée — reste entièrement dans `mcp`.
-- Pas de logique métier — uniquement du routage/proxy.
+    MCP -.tout appel vers un backend.-> GW
+```
 
-## 3. Stack technique
+**Ce que `api-gateway` fait :**
+- Relaie les requêtes d'authentification vers `sorabel-idp` (Keycloak)
+- Relaie `list_tools` / `call_tool` vers `mcp`
+- Relaie les appels internes de `mcp` vers `text2sql-ai`, `sorabelsql-api`, `rag-hybride`
 
-- C#, Clean Architecture (cf. `.claude/rules/csharp-clean-architecture.md` à la racine
-  de la solution)
+**Ce que `api-gateway` ne fait jamais :**
+- Inspecter ou valider un JWT (signature, `iss`, `aud`, claims) — c'est `mcp` qui s'en charge
+- Lire ou appliquer la matrice d'accès (profil × tool × ressources) — elle vit uniquement dans `mcp`
+- Contenir la moindre règle métier
 
-## 4. Exigences servies
+> Détail du flux complet (authn, RBAC, garde-fous SQL) : voir `MCP.md` §6.1.
 
-Support de E4 (architecture MCP unifiée) — c'est le point d'entrée réseau unique de la
-solution, mais l'exigence elle-même (gouvernance centralisée) est portée par `mcp`.
+## Stack technique
 
----
-*Projet en cours de mise en place — voir `../CLAUDE.md` pour le contexte de la solution
-Sorabel et la répartition des responsabilités entre projets.*
+| | |
+|---|---|
+| Langage | C# (.NET) |
+| Architecture | Clean Architecture |
+| Pattern | Reverse-proxy (type YARP) |
+| Déploiement | Docker (obligatoire, cf. convention transverse solution) |
+
+## Démarrage rapide
+
+```bash
+make build         # dotnet build
+make test          # dotnet test
+make lint          # dotnet format --verify-no-changes
+make docker-build  # docker build -t api-gateway .
+make docker-up     # docker compose up
+make docker-down   # docker compose down
+```
+
+## Configuration des routes
+
+Les routes sont déclarées de façon déclarative (pas de routage écrit à la main). Pour ajouter
+une route, utiliser la commande dédiée plutôt qu'une édition manuelle :
+
+```
+/new-route
+```
+
+Chaque route backend porte son propre timeout et sa politique de retry (résilience type Polly).
+
+## Documents liés
+
+- [`MCP.md`](../MCP.md) — schéma complet du workflow, flux d'authentification, matrice d'accès
+- `CLAUDE.md` (ce dossier) — règles et non-négociables pour Claude Code
+- `.claude/rules/routing-proxy.md` — conventions de routage détaillées
+
+## Non-objectifs (rappel)
+
+Le RBAC, l'authentification et l'exécution SQL sont **hors périmètre** de ce projet par design.
+Toute contribution ajoutant de la logique d'autorisation ici doit être redirigée vers `mcp/`.
