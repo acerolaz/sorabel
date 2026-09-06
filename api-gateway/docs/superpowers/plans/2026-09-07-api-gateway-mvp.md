@@ -207,7 +207,7 @@ public static class RetryDecision
 dotnet test tests/Sorabel.ApiGateway.Domain.Tests
 ```
 
-Attendu : SUCCÈS, 24 tests passés.
+Attendu : SUCCÈS, 14 tests passés.
 
 - [ ] **Étape 7 : Mettre le Makefile en conformité avec la règle de pyramide de tests**
 
