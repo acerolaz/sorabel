@@ -23,7 +23,7 @@ Ces contraintes s'appliquent à **toutes** les tâches. Toute tâche qui les vio
 - **Cible .NET : `net9.0`.** Version du paquet YARP : `2.3.0`.
 - **Messages de commit** : Conventional Commits, scope `api-gateway`, en français, **sans aucune métadonnée d'IA** (cf. `.claude/rules/git-conventions.md`).
 - **Ne jamais committer sur `main`.** Travailler sur une branche `feat/api-gateway/<description>`.
-- **Niveaux de test** : conformes à `.claude/rules/testing-pyramid.md`. Les tests de niveau 4 portent `[Trait("Category", "E2E")]` et sont exclus de `make test`.
+- **Niveaux de test** : conformes à la spec (design §8). Les tests de niveau 4 portent `[Trait("Category", "E2E")]` et sont exclus de `make test`.
 
 ## Décision technique découverte pendant la préparation du plan
 
