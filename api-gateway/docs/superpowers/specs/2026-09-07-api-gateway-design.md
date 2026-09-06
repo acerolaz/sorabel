@@ -3,8 +3,8 @@
 - **Date** : 2026-09-07
 - **Statut** : validé, prêt pour plan d'implémentation
 - **Portée** : premier incrément d'`api-gateway`, hub de routage pur de la solution Sorabel
-- **Sources** : `../../../MCP.md`, `src/CLAUDE.md`, `api-gateway/CLAUDE.md`,
-  `.claude/rules/{csharp-clean-architecture,api-contracts,security,makefile-conventions,testing-pyramid}.md`
+- **Sources** : `docs/architecture/MCP.md`, `CLAUDE.md`, `api-gateway/CLAUDE.md`,
+  `.claude/rules/{csharp-clean-architecture,api-contracts,security,makefile-conventions}.md`
 
 ---
 
