@@ -351,9 +351,7 @@ Le test « backend répondant 403 → relayé verbatim » est le garde-fou de r�
 
 ## 10. Travaux connexes identifiés, hors périmètre de cette spec
 
-1. **`../.claude/rules/docker-conventions.md` est référencé par `api-gateway/CLAUDE.md` mais
-   n'existe pas.** À créer, ou la référence à retirer. Non bloquant pour l'implémentation,
-   mais laisse un `@import` mort dans le contexte chargé à chaque session.
+1. **`../.claude/rules/docker-conventions.md` n'existe pas.** À créer si une convention Docker transverse est souhaitée (aucun fichier ne l'importe actuellement).
 2. **`.claude/rules/routing-proxy.md` est un TODO** : il recevra le plan d'adressage du §3
    comme contenu.
 3. **La commande `/new-route` est un squelette non implémenté** : elle devient implémentable
