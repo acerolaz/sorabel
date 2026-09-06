@@ -32,8 +32,8 @@ Les 2 projets Python restants (`mcp`, `rag-hybride`) partagent un unique
 solution (voir `../../CLAUDE.md` § Commandes) : chaque paquet `app` s'exécute depuis son
 répertoire de travail, jamais installé en site-packages, et il n'y a pas de Dockerfile
 par projet. Leur Makefile n'a donc que `build` (délègue à `cd .. && pip install -e ".[dev]"`),
-`test`, `lint` et `clean` — pas de `docker-build`/`docker-up`/`docker-down`. Les projets
-C# (`api-gateway`, `sorabelsql-api`) suivent le tableau standard sans exception.
+`test`, `lint` et `clean` — pas de `docker-build`/`docker-up`/`docker-down`. Les
+projets C# (`api-gateway`, `sorabelsql-api`) suivent le tableau standard sans exception.
 
 ## Exception — `text2sql-ai`
 
