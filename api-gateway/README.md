@@ -33,7 +33,7 @@ flowchart LR
 - Lire ou appliquer la matrice d'accès (profil × tool × ressources) — elle vit uniquement dans `mcp`
 - Contenir la moindre règle métier
 
-> Détail du flux complet (authn, RBAC, garde-fous SQL) : voir `MCP.md` §6.1.
+> Détail du flux complet (authn, RBAC, garde-fous SQL) : voir `docs/architecture/MCP.md` §6.1.
 
 ## Stack technique
 
