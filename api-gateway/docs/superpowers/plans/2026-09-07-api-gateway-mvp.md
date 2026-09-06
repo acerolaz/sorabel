@@ -2196,7 +2196,7 @@ Dans `api-gateway/CLAUDE.md`, section « Critères de succès », remplacer la p
 - `make build && make test && make lint` passent, et `make test-e2e` passe avec Docker démarré
 ```
 
-Et **retirer** la ligne `@../.claude/rules/docker-conventions.md` de l'en-tête : ce fichier n'existe pas, l'import est mort. Si la convention Docker doit exister, elle fera l'objet d'une PR transverse dédiée.
+Aucun import `@../.claude/rules/docker-conventions.md` n'est présent actuellement dans `api-gateway/CLAUDE.md` ; si une convention Docker transverse est souhaitée, elle devra être ajoutée via une PR dédiée.
 
 - [ ] **Étape 4 : Mettre à jour le README**
 
