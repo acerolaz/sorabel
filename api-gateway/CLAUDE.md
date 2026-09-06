@@ -17,7 +17,7 @@ ni par un client, ni entre eux.
 - Ne jamais implémenter de logique d'autorisation ou de matrice RBAC ici — portée par `mcp/`
 - Relayer les JWT de façon transparente, sans inspecter signature/claims — c'est le rôle du serveur MCP
 - Rester le seul chemin de sortie vers Keycloak, `mcp`, `text2sql-ai`, `sorabelsql-api`, `rag-hybride`
-- Toujours buildable et démarrable via `make docker-build && make docker-up`
+- Toujours buildable via `make build && make test && make lint` ; la cible Docker est à activer dès qu'un `Dockerfile`/Compose est ajouté
 - Aucune règle métier ne doit fuiter dans la couche de routage
 
 ## Règles strictes
