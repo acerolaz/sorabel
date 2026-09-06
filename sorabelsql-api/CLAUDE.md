@@ -17,7 +17,7 @@ Ce projet ne **génère** jamais de SQL : la génération est portée par `text2
 - PostgreSQL tourne dans son propre conteneur, jamais partagé avec un autre projet en dev
 - Masquage de colonnes appliqué avant retour du résultat (ex: `purchase_price`, `margin` filtrés selon profil)
 - Accessible uniquement via l'`api-gateway` — aucun accès direct depuis `mcp/` ni les clients
-- Toujours buildable et démarrable via `make docker-build && make docker-up`
+- Toujours buildable via `make build && make test && make lint` ; activer `make docker-build && make docker-up` dès que `Dockerfile`/Compose et le projet .NET sont ajoutés
 
 ## Chaîne de garde-fous (ordre d'application strict)
 1. Rôle DB en lecture seule
