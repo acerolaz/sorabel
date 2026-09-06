@@ -50,9 +50,8 @@ flowchart LR
 make build         # dotnet build
 make test          # dotnet test
 make lint          # dotnet format --verify-no-changes
-make docker-build  # docker build -t api-gateway .
-make docker-up     # docker compose up
-make docker-down   # docker compose down
+# TODO: ajouter Dockerfile + docker compose pour activer docker-build/docker-up
+# (pour l'instant, seul `docker compose` à la racine démarre Postgres)
 ```
 
 ## Configuration des routes
