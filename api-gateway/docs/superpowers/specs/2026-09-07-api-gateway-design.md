@@ -319,7 +319,7 @@ par la seule discipline de rédaction.
 
 ## 8. Stratégie de test
 
-Conforme à `.claude/rules/testing-pyramid.md`. Forme attendue pour ce projet : **diamant**,
+La stratégie de test est définie dans ce document. Forme attendue pour ce projet : **diamant**,
 niveau 3 dominant — un socle unitaire fin est ici la conséquence directe de l'absence de
 logique métier, non un défaut de couverture.
 
