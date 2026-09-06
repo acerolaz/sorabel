@@ -76,7 +76,7 @@ Fonde la solution et livre la première brique de domaine — celle qui porte la
 - [ ] **Étape 1 : Créer la branche et le squelette de solution**
 
 ```bash
-cd src/api-gateway
+cd api-gateway
 git checkout -b feat/api-gateway/mvp
 
 dotnet new sln -n Sorabel.ApiGateway
