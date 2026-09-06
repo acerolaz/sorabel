@@ -217,7 +217,8 @@ Trois composants écrits à la main, pas un de plus.
 
 | Situation | Retry | Réponse de la gateway |
 |---|---|---|
-| Connexion refusée, échec DNS, socket fermée avant envoi | Oui, 2 tentatives avec backoff | 502 `BACKEND_UNREACHABLE` si les tentatives échouent |
+| Connexion refusée, échec DNS — **et requête sans corps** | Oui, 2 tentatives avec backoff | 502 `BACKEND_UNREACHABLE` si les tentatives échouent |
+| Connexion refusée, échec DNS — **requête portant un corps** | Non (voir §5.1.1) | 502 `BACKEND_UNREACHABLE` |
 | Timeout de réponse | Non | 504 `BACKEND_TIMEOUT` |
 | Le backend répond, quel que soit le statut (200, 403, 500…) | Non | **Relais verbatim** — statut, corps et en-têtes inchangés |
 
@@ -228,6 +229,20 @@ génération LLM facturée). Rejouer sur un timeout produirait une seconde exéc
 seconde entrée d'audit, rendant E5 trompeur.
 
 **Garantie tenue : une requête cliente = au plus une exécution backend.**
+
+#### 5.1.1 Le rejeu ne s'applique jamais à une requête portant un corps
+
+Contrainte découverte lors de la préparation du plan d'implémentation, et vérifiée contre
+YARP 2.3.0. YARP transmet le corps de la requête entrante en **streaming**, via un contenu
+HTTP à usage unique. Rejouer une telle requête enverrait un corps **vide** au second essai —
+une corruption silencieuse bien pire que l'échec qu'on cherchait à absorber.
+
+Le rejeu couvre donc en pratique les `GET` sans corps, dont la récupération JWKS sur
+`/internal/v1/auth`. Tous les `call_tool` en `POST` échouent immédiatement en 502. C'est un
+**renforcement** de la garantie « au plus une exécution », pas un affaiblissement.
+
+Encodé dans `RetryDecision.CanRetry(HttpRequestError error, bool requestHasBody)` et couvert
+par un test de niveau 1 dédié.
 
 ### 5.2 Pourquoi un 5xx du backend n'est pas réécrit
 
