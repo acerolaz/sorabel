@@ -118,14 +118,14 @@ techniquement subtil du projet ; il vit dans `Infrastructure/Resilience/`.
 Deux plans d'adressage distincts, qui matérialisent dans les URLs la distinction
 *north-south* / *service-to-service* du `MCP.md` §6.1.
 
-| Route entrante | Cluster | Timeout | Appelée par |
+| Route entrante | ClusterId | Timeout | Appelée par |
 |---|---|---|---|
-| `/api/v1/auth/{**rest}` | `sorabel-idp` | 10 s | Clients (obtention du JWT) |
+| `/api/v1/auth/{**rest}` | `idp` | 10 s | Clients (obtention du JWT) |
 | `/api/v1/mcp/{**rest}` | `mcp` | 120 s | Clients (`list_tools`, `call_tool`) |
-| `/internal/v1/auth/{**rest}` | `sorabel-idp` | 10 s | `mcp` (récupération JWKS) |
-| `/internal/v1/text2sql/{**rest}` | `text2sql-ai` | 90 s | `mcp` (`ask_database`) |
-| `/internal/v1/sql/{**rest}` | `sorabelsql-api` | 30 s | `mcp` (`run_sql_query`, tools figés) |
-| `/internal/v1/rag/{**rest}` | `rag-hybride` | 30 s | `mcp` (`search_documents` et briques) |
+| `/internal/v1/auth/{**rest}` | `idp` | 10 s | `mcp` (récupération JWKS) |
+| `/internal/v1/text2sql/{**rest}` | `text2sql` | 90 s | `mcp` (`ask_database`) |
+| `/internal/v1/sql/{**rest}` | `sql` | 30 s | `mcp` (`run_sql_query`, tools figés) |
+| `/internal/v1/rag/{**rest}` | `rag` | 30 s | `mcp` (`search_documents` et briques) |
 | `/health` | — (gateway elle-même) | — | Docker, supervision |
 
 ### 3.1 La route JWKS interne
