@@ -184,7 +184,7 @@ lente qu'elle peut déclencher, avec une marge. D'où 120 s sur `/api/v1/mcp` fa
 }
 ```
 
-Le préfixe est retiré avant transmission : `text2sql-ai` reçoit `/api/v1/generate` comme s'il
+Le préfixe est retiré avant transmission : `text2sql-ai` reçoit `/generate` comme s'il
 était appelé directement. **Les backends n'ont pas à savoir qu'une gateway existe.**
 
 Les adresses des clusters sont surchargeables par variable d'environnement
