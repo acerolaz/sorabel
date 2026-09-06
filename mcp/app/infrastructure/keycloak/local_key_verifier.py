@@ -54,11 +54,11 @@ class LocalKeyTokenVerifier:
         profile = claims.get(PROFILE_CLAIM)
         subject = claims.get("sub")
         if not isinstance(profile, str) or not isinstance(subject, str):
-            raise InvalidTokenError("claims obligatoires manquants")
+            raise InvalidTokenError("token invalide")
 
         expires_at_raw = claims.get("exp")
         if not isinstance(expires_at_raw, (int, float)):
-            raise InvalidTokenError("claim `exp` manquant")
+            raise InvalidTokenError("token invalide")
 
         return Identity(
             subject=subject,
