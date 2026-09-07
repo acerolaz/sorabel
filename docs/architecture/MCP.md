@@ -150,7 +150,7 @@ flowchart LR
 | Rôles de realm | `role-support`, `role-sales`, `role-dev` — un par profil |
 | Clients OAuth enregistrés | `bot-slack-support`, `poste-vente`, `ide-dev` — un client Keycloak par client MCP |
 | Grant type | `client_credentials` pour les clients machine (Bot Slack) ; `authorization_code` + PKCE pour un utilisateur humain (poste Vente, IDE dev) |
-| Protocol Mapper | Injecte un claim custom `sorabel_profile` dans le JWT, à partir du rôle Keycloak attribué au client |
+| Protocol Mapper | Injecte un claim custom `sorabel_profile` dans le JWT (chaîne : `support`, `sales`, `dev`), à partir de **l'identité du client OAuth** appelant — mapper `hardcoded-claim` porté par la configuration du client, et non dérivé du rôle : le mapper de rôles natif produirait un tableau préfixé (`["role-sales"]`), et `bot-slack-support` s'authentifie en `client_credentials`, sans utilisateur ni rôle utilisateur à lire. Les rôles de realm restent définis comme point d'extension. Détail : `sorabel-idp/docs/superpowers/specs/2026-09-07-sorabel-idp-docker-design.md` §5 |
 | Endpoint de validation | `GET /realms/sorabel-data-gate/protocol/openid-connect/certs` (JWKS) — le **serveur MCP** vérifie signature, `iss`, `aud`, expiration (l'API Gateway relaie la requête sans l'inspecter) |
 
 ```mermaid
@@ -492,7 +492,7 @@ Profil × tool × collections × tables/colonnes (rappel de la matrice détaill�
 | **Realm (Keycloak)** | Espace de configuration isolé dans Keycloak regroupant utilisateurs, clients et rôles d'un même périmètre (ici `sorabel-data-gate`) |
 | **Client OAuth** | Application enregistrée dans Keycloak, identifiée séparément (un client Keycloak par client MCP : `bot-slack-support`, `poste-vente`, `ide-dev`) |
 | **JWT (JSON Web Token)** | Jeton d'accès signé émis par Keycloak, transportant l'identité et les claims (dont `sorabel_profile`) jusqu'au serveur MCP (via l'API Gateway) |
-| **Claim** | Paire clé/valeur portée par un JWT (ex. `sorabel_profile: "sales"`), injectée via un Protocol Mapper à partir du rôle Keycloak |
+| **Claim** | Paire clé/valeur portée par un JWT (ex. `sorabel_profile: "sales"`), injectée via un Protocol Mapper à partir de l'identité du client OAuth appelant |
 | **Protocol Mapper** | Règle Keycloak qui transforme un rôle/attribut en claim JWT lors de l'émission du token |
 | **JWKS (JSON Web Key Set)** | Endpoint Keycloak publiant les clés publiques permettant au **serveur MCP** de vérifier la signature d'un JWT sans appel synchrone à chaque requête (mise en cache) |
 | **`client_credentials`** | Grant OAuth pour une authentification machine-à-machine (ex. Bot Slack), sans utilisateur humain interactif |
