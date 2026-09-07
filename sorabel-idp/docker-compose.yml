@@ -31,6 +31,9 @@ services:
       # Verrouille l'identité publique : sans cela, un token obtenu de conteneur à
       # conteneur porterait iss=http://sorabel-idp:8080/... et mcp le rejetterait,
       # alors que la configuration paraîtrait correcte.
+      # ATTENTION : suit KEYCLOAK_PORT. Changer KEYCLOAK_PORT (ex. 8081) change donc
+      # silencieusement iss=http://localhost:8081/... — sans réaligner MCP_JWT_ISSUER
+      # (.env.example racine), toute validation de token côté mcp échoue.
       KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8080}
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       # Expose /health/* sur le port de management 9000 (non publié).
