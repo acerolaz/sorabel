@@ -2249,7 +2249,7 @@ Design validé : `docs/superpowers/specs/2026-09-07-api-gateway-design.md`.
 ## Comment tester
 
 ```bash
-cd src/api-gateway
+cd api-gateway
 make build && make test && make lint
 make docker-build && make test-e2e
 ```
@@ -2269,7 +2269,7 @@ CORPS
 Ne rien affirmer sans avoir vu la sortie de ces commandes.
 
 ```bash
-cd src/api-gateway
+cd api-gateway
 make build && make test && make lint
 make docker-build && make test-e2e
 ```
