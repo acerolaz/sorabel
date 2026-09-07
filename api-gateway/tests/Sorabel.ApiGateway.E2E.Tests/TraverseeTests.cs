@@ -14,7 +14,8 @@ namespace Sorabel.ApiGateway.E2E.Tests;
 public class TraverseeTests
 {
     private static readonly string BaseUrl =
-        Environment.GetEnvironmentVariable("API_GATEWAY_URL") ?? "http://localhost:8080";
+        Environment.GetEnvironmentVariable("API_GATEWAY_URL")
+        ?? $"http://localhost:{Environment.GetEnvironmentVariable(\"API_GATEWAY_PORT\") ?? \"8080\"}";
 
     private static HttpClient Client() => new() { BaseAddress = new Uri(BaseUrl), Timeout = TimeSpan.FromSeconds(20) };
 
