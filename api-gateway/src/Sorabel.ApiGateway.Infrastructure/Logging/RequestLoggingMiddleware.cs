@@ -11,8 +11,10 @@ namespace Sorabel.ApiGateway.Infrastructure.Logging;
 /// méthode, chemin entrant, backend, statut, durée.
 ///
 /// Aucun en-tête n'est journalisé — c'est une liste d'autorisation de champs,
-/// pas une liste de blocage à tenir à jour. SensitiveHeaders documente ce qui
-/// ne doit jamais fuiter si un futur contributeur ajoutait des en-têtes ici.
+/// pas une liste de blocage à tenir à jour. <see cref="Sorabel.ApiGateway.Domain.SensitiveHeaders"/>
+/// n'est donc pas consommé ici (ni ailleurs) : ce type documente, pour un futur
+/// contributeur qui ajouterait un jour la journalisation d'en-têtes, ce qui ne
+/// doit jamais fuiter — il ne fournit aucun filtrage existant sur lequel s'appuyer.
 /// </summary>
 public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger)
 {

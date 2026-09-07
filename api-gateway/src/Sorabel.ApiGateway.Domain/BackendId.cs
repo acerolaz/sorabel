@@ -18,6 +18,12 @@ public readonly record struct BackendId
 
     public static IReadOnlyList<BackendId> All => [Idp, Mcp, Text2Sql, Sql, Rag];
 
+    /// <remarks>
+    /// <paramref name="id"/> n'est significatif que si la méthode retourne
+    /// <c>true</c> : en cas d'échec, elle vaut <c>default</c>, dont
+    /// <see cref="Value"/> est <c>null</c> — jamais à déréférencer sans avoir
+    /// vérifié la valeur de retour.
+    /// </remarks>
     public static bool TryFromClusterId(string? clusterId, out BackendId id)
     {
         foreach (var candidate in All)

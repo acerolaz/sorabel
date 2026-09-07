@@ -21,6 +21,12 @@ public readonly record struct CorrelationId
     public static CorrelationId FromHeaderOrNew(string? header)
         => TryParse(header, out var id) ? id : New();
 
+    /// <remarks>
+    /// <paramref name="id"/> n'est significatif que si la méthode retourne
+    /// <c>true</c> : en cas d'échec, elle vaut <c>default</c>, dont
+    /// <see cref="Value"/> est <c>null</c> — jamais à déréférencer sans avoir
+    /// vérifié la valeur de retour.
+    /// </remarks>
     public static bool TryParse(string? candidate, out CorrelationId id)
     {
         id = default;

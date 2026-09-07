@@ -35,23 +35,13 @@ public sealed class GatewayFixture : IDisposable
         var lignes = new List<string>();
         journal = lignes;
 
-        var overrides = destinations.ToDictionary(
-            kv => $"ReverseProxy:Clusters:{kv.Key}:Destinations:d1:Address",
-            kv => (string?)kv.Value);
+        var factory = CreateFactory(destinations, builder => builder.ConfigureLogging(logging =>
+        {
+            logging.ClearProviders();
+            logging.SetMinimumLevel(LogLevel.Debug);
+            logging.AddProvider(new ListLoggerProvider(lignes));
+        }));
 
-        var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-            {
-                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(overrides));
-                builder.ConfigureLogging(logging =>
-                {
-                    logging.ClearProviders();
-                    logging.SetMinimumLevel(LogLevel.Debug);
-                    logging.AddProvider(new ListLoggerProvider(lignes));
-                });
-            });
-
-        _factories.Add(factory);
         return factory.CreateClient();
     }
 
@@ -64,15 +54,44 @@ public sealed class GatewayFixture : IDisposable
     public IServiceProvider CreateServices(IReadOnlyDictionary<string, string> destinations) =>
         CreateFactory(destinations).Services;
 
-    private WebApplicationFactory<Program> CreateFactory(IReadOnlyDictionary<string, string> destinations)
+    /// <param name="destinations">clusterId → adresse de base du backend.</param>
+    /// <param name="configOverrides">
+    /// Clés de configuration arbitraires (ex. "ReverseProxy:Routes:mcp-public:Timeout"),
+    /// surchargées de la même façon que les adresses de cluster.
+    /// </param>
+    public HttpClient CreateClient(
+        IReadOnlyDictionary<string, string> destinations,
+        IReadOnlyDictionary<string, string> configOverrides) =>
+        CreateFactory(destinations, configOverrides).CreateClient();
+
+    private WebApplicationFactory<Program> CreateFactory(
+        IReadOnlyDictionary<string, string> destinations,
+        Action<IWebHostBuilder>? configureBuilder = null) =>
+        CreateFactory(destinations, configOverrides: null, configureBuilder);
+
+    private WebApplicationFactory<Program> CreateFactory(
+        IReadOnlyDictionary<string, string> destinations,
+        IReadOnlyDictionary<string, string>? configOverrides,
+        Action<IWebHostBuilder>? configureBuilder = null)
     {
         var overrides = destinations.ToDictionary(
             kv => $"ReverseProxy:Clusters:{kv.Key}:Destinations:d1:Address",
             kv => (string?)kv.Value);
 
+        if (configOverrides is not null)
+        {
+            foreach (var (cle, valeur) in configOverrides)
+            {
+                overrides[cle] = valeur;
+            }
+        }
+
         var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
-                (_, config) => config.AddInMemoryCollection(overrides)));
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(overrides));
+                configureBuilder?.Invoke(builder);
+            });
 
         _factories.Add(factory);
         return factory;

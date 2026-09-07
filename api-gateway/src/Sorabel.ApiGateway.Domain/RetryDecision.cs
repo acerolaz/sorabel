@@ -14,6 +14,16 @@ namespace Sorabel.ApiGateway.Domain;
 /// n'a rien reçu, et où la requête ne porte pas de corps : YARP transmet le
 /// corps entrant en streaming via un contenu à usage unique, qu'un second essai
 /// enverrait vide.
+///
+/// Hypothèse non vérifiée, à documenter plutôt qu'à découvrir en prod :
+/// <see cref="HttpRequestError.ConnectionError"/> est supposé se produire sur
+/// le chemin d'ÉTABLISSEMENT de la connexion, avant tout octet de requête
+/// écrit — c'est ce qui justifie la CERTITUDE ci-dessus. Si cette hypothèse
+/// s'avérait fausse (un ConnectionError survenant après un envoi partiel),
+/// l'exposition reste bornée aux requêtes sans corps par le garde-fou
+/// `requestHasBody` ci-dessus : le pire cas resterait un rejeu d'une requête
+/// déjà bornée à être rejouable sans corps, jamais un doublon d'une requête
+/// avec effets de bord côté backend.
 /// </summary>
 public static class RetryDecision
 {

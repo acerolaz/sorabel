@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using Xunit;
+using static Sorabel.ApiGateway.Api.Tests.TestAssertions;
 
 namespace Sorabel.ApiGateway.Api.Tests;
 
@@ -12,15 +13,6 @@ public class RoutingContractTests : IClassFixture<GatewayFixture>
     private readonly GatewayFixture _fixture;
 
     public RoutingContractTests(GatewayFixture fixture) => _fixture = fixture;
-
-    // Prouve l'invariant plutôt que de le supposer : si WireMock ne renseignait pas
-    // la requête ou ses en-têtes, l'assertion échoue ici avec un message clair, pas
-    // plus loin avec une NullReferenceException sur une ligne arbitraire.
-    private static T RequireNotNull<T>(T? value) where T : class
-    {
-        Assert.NotNull(value);
-        return value;
-    }
 
     // Les 6 routes du contrat, avec le cluster qu'elles doivent atteindre et le
     // chemin que le backend doit recevoir une fois le préfixe retiré.

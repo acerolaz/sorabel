@@ -2,6 +2,7 @@ using Sorabel.ApiGateway.Domain;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using Xunit;
+using static Sorabel.ApiGateway.Api.Tests.TestAssertions;
 
 namespace Sorabel.ApiGateway.Api.Tests;
 
@@ -21,15 +22,6 @@ public class CorrelationTests : IClassFixture<GatewayFixture>
 
         var client = _fixture.CreateClient(new Dictionary<string, string> { ["mcp"] = backend.Url! });
         return (client, backend);
-    }
-
-    // Prouve l'invariant plutôt que de le supposer : si WireMock ne renseignait pas
-    // la requête ou ses en-têtes, l'assertion échoue ici avec un message clair, pas
-    // plus loin avec une NullReferenceException sur une ligne arbitraire.
-    private static T RequireNotNull<T>(T? value) where T : class
-    {
-        Assert.NotNull(value);
-        return value;
     }
 
     [Fact]
