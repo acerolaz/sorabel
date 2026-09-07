@@ -13,6 +13,15 @@ public class ErrorContractTests : IClassFixture<GatewayFixture>
 
     public ErrorContractTests(GatewayFixture fixture) => _fixture = fixture;
 
+    // Prouve l'invariant plutôt que de le supposer : si le payload ne portait pas
+    // le champ attendu, l'assertion échoue ici avec un message clair, pas plus
+    // loin avec une NullReferenceException sur une ligne arbitraire.
+    private static T RequireNotNull<T>(T? value) where T : class
+    {
+        Assert.NotNull(value);
+        return value;
+    }
+
     [Fact]
     public async Task Backend_eteint_donne_un_502_au_format_du_contrat()
     {
@@ -45,7 +54,7 @@ public class ErrorContractTests : IClassFixture<GatewayFixture>
         var corps = await (await client.GetAsync("/api/v1/mcp/call_tool")).Content.ReadAsStringAsync();
 
         using var payload = JsonDocument.Parse(corps);
-        var message = payload.RootElement.GetProperty("message").GetString()!;
+        var message = RequireNotNull(payload.RootElement.GetProperty("message").GetString());
 
         Assert.DoesNotContain("127.0.0.1", message);
         Assert.DoesNotContain("mcp", message, StringComparison.OrdinalIgnoreCase);

@@ -27,6 +27,34 @@ public sealed class GatewayFixture : IDisposable
     public HttpClient CreateClient(IReadOnlyDictionary<string, string> destinations) =>
         CreateFactory(destinations).CreateClient();
 
+    /// Variante qui capture toutes les lignes de log émises par la gateway.
+    public HttpClient CreateClient(
+        IReadOnlyDictionary<string, string> destinations,
+        out List<string> journal)
+    {
+        var lignes = new List<string>();
+        journal = lignes;
+
+        var overrides = destinations.ToDictionary(
+            kv => $"ReverseProxy:Clusters:{kv.Key}:Destinations:d1:Address",
+            kv => (string?)kv.Value);
+
+        var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(overrides));
+                builder.ConfigureLogging(logging =>
+                {
+                    logging.ClearProviders();
+                    logging.SetMinimumLevel(LogLevel.Debug);
+                    logging.AddProvider(new ListLoggerProvider(lignes));
+                });
+            });
+
+        _factories.Add(factory);
+        return factory.CreateClient();
+    }
+
     /// <summary>
     /// Expose le conteneur DI de l'hôte en mémoire, pour vérifier une
     /// composition de services (ex. quelle implémentation a été résolue)

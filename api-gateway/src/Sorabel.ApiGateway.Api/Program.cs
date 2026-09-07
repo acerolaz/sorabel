@@ -1,5 +1,6 @@
 using Sorabel.ApiGateway.Infrastructure.Correlation;
 using Sorabel.ApiGateway.Infrastructure.Errors;
+using Sorabel.ApiGateway.Infrastructure.Logging;
 using Sorabel.ApiGateway.Infrastructure.Resilience;
 using Yarp.ReverseProxy.Forwarder;
 
@@ -19,6 +20,7 @@ var app = builder.Build();
 
 app.UseRequestTimeouts();
 app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ForwarderErrorMiddleware>();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
