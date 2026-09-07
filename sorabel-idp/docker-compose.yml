@@ -1,0 +1,60 @@
+# Stack Docker de sorabel-idp — Keycloak conteneurisé (authn + claim sorabel_profile).
+#
+# Ce projet est de la configuration, pas du développement : pas de Dockerfile,
+# pas de Makefile, pas de code applicatif (cf. ../CLAUDE.md et
+# ../.claude/rules/makefile-conventions.md).
+#
+# La base est volontairement éphémère (start-dev, H2 en mémoire, aucun volume de
+# données) : realm-export/ est ainsi la seule source de vérité du realm, et la
+# dérive base/export est structurellement impossible.
+#
+# `name` est explicite : sans lui, Compose dérive le nom de projet du répertoire
+# et entre en concurrence avec le compose racine sur les noms de ressources.
+name: sorabel-idp
+
+services:
+  sorabel-idp:
+    # Nom de service = nom d'hôte réseau. api-gateway déclare déjà
+    # http://sorabel-idp:8080/ dans appsettings.Routes.json — ne pas renommer.
+    image: quay.io/keycloak/keycloak:26.7.3
+    container_name: sorabel-idp
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?KC_BOOTSTRAP_ADMIN_PASSWORD doit être défini — copier .env.example vers .env}
+      # Consommés par la substitution ${env.…} de l'export de realm.
+      SORABEL_IDP_BOT_CLIENT_SECRET: ${SORABEL_IDP_BOT_CLIENT_SECRET:?SORABEL_IDP_BOT_CLIENT_SECRET doit être défini — copier .env.example vers .env}
+      SORABEL_IDP_DEV_USER_PASSWORD: ${SORABEL_IDP_DEV_USER_PASSWORD:?SORABEL_IDP_DEV_USER_PASSWORD doit être défini — copier .env.example vers .env}
+      # Verrouille l'identité publique : sans cela, un token obtenu de conteneur à
+      # conteneur porterait iss=http://sorabel-idp:8080/... et mcp le rejetterait,
+      # alors que la configuration paraîtrait correcte.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8080}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Expose /health/* sur le port de management 9000 (non publié).
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      # :ro — le conteneur ne réécrit jamais la source de vérité du realm.
+      - ./realm-export:/opt/keycloak/data/import:ro
+    healthcheck:
+      # L'image Keycloak est distroless : ni curl ni wget. On passe par le /dev/tcp
+      # de bash, en l'invoquant explicitement (CMD-SHELL utiliserait /bin/sh).
+      test:
+        - CMD
+        - /bin/bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; grep -q "\"status\": \"UP\"" <&3'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - sorabel
+
+networks:
+  # Réseau partagé entre les composes de la solution.
+  # Prérequis, une seule fois : docker network create sorabel
+  sorabel:
+    external: true
+    name: sorabel
