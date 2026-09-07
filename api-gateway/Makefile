@@ -1,12 +1,16 @@
 # Cibles standard — voir ../.claude/rules/makefile-conventions.md
 
-.PHONY: build test lint docker-build docker-up docker-down clean
+.PHONY: build test test-e2e lint docker-build docker-up docker-down clean
 
 build:
 	dotnet build
 
 test:
-	dotnet test
+	dotnet test --filter "Category!=E2E"
+
+test-e2e:
+	docker compose up -d --build --wait || (docker compose down; exit 1)
+	dotnet test --filter "Category=E2E" ; status=$$? ; docker compose down ; exit $$status
 
 lint:
 	dotnet format --verify-no-changes

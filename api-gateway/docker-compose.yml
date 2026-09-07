@@ -1,0 +1,22 @@
+name: sorabel-api-gateway
+
+services:
+  api-gateway:
+    build: .
+    image: api-gateway
+    ports:
+      - "${API_GATEWAY_PORT:-8080}:8080"
+    environment:
+      # En local, seul le backend factice est joignable ; les autres clusters
+      # gardent leur adresse par défaut et produisent un 502, ce qui est le
+      # comportement attendu tant qu'ils n'existent pas.
+      ReverseProxy__Clusters__text2sql__Destinations__d1__Address: http://backend-factice/
+    depends_on:
+      backend-factice:
+        condition: service_started
+
+  backend-factice:
+    image: traefik/whoami:v1.10
+    # Renvoie en clair la ligne de requête et les en-têtes reçus : permet de
+    # vérifier de l'extérieur que le préfixe a été retiré et que le correlation
+    # ID est bien arrivé.
