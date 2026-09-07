@@ -123,9 +123,13 @@ plus le claim.
 Le `CLAUDE.md` racine impose de **résoudre** toute contradiction entre niveaux avant de
 merger, pas de la contourner :
 
-- `sorabel-idp/README.md` §2 est corrigé dans la même PR (même scope).
-- `docs/architecture/MCP.md` §3 est un scope transverse : signalé ici, corrigé dans une
-  PR distincte (`git-conventions.md`, « une PR = un scope »).
+**Résolue avant l'implémentation** (les deux documents affirment désormais que le profil
+vient de l'identité du client OAuth, et que les rôles de realm ne pilotent rien) :
+
+- `sorabel-idp/README.md` §2 — corrigé, même scope, commit `f5b51b8`.
+- `docs/architecture/MCP.md` §3 et glossaire — corrigés dans un **commit isolé**
+  (`d81eee4`), scope transverse : extractible de cette PR si la revue préfère le séparer
+  (`git-conventions.md`, « une PR = un scope »).
 
 ## 6. Secrets
 
