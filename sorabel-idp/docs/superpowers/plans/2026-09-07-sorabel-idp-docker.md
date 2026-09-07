@@ -982,3 +982,25 @@ Aucune section de la spec n'est sans tâche.
 **2. Placeholders** — aucun « TBD », aucun « implémenter plus tard », aucune étape sans contenu exécutable. Les deux branches conditionnelles (repli `bootstrap-secrets.sh` en tâche 2 étape 5, sa documentation en tâche 5 étape 3) contiennent leur code complet et leur condition de déclenchement explicite.
 
 **3. Cohérence des identifiants** — vérifiés d'un bout à l'autre : `sorabel-data-gate`, `sorabel-idp` (service et hôte), `sorabel_profile`, `sorabel-mcp` (audience), `bot-slack-support` / `poste-vente` / `ide-dev`, `role-support` / `role-sales` / `role-dev`, `u-sales` / `u-dev`, les cinq variables du `.env`, et l'id `11111111-1111-4111-8111-111111111111` référencé identiquement dans `clients`, dans `serviceAccountClientLink` et dans le repli `kcadm`. La fonction `mappers(profile)` de la tâche 4 est répétée intégralement plutôt que référencée depuis la tâche 3, les tâches pouvant être lues dans un ordre quelconque.
+
+---
+
+## Correction post-implémentation (2026-09-07)
+
+Ce plan affirme à plusieurs endroits (tâche 2 étape 2, tâche 2 étape 6, tâche 2 étape 7,
+et « Cohérence des identifiants » ci-dessus) que la section `users` référence le client
+`bot-slack-support` par son **id interne**, via un champ nommé `serviceAccountClientLink`.
+**C'est faux.** L'exécution de la tâche 2 a établi que le champ réellement lu par
+Keycloak pour ce câblage est `serviceAccountClientId`, et qu'il attend le **`clientId`**
+du client (la chaîne `bot-slack-support`), pas son `id` UUID interne — cf.
+`realm-export/sorabel-data-gate.json`.
+
+Les `id` fixes des clients (`11111111-1111-4111-8111-111111111111`, etc.) ont malgré
+tout été conservés dans l'export livré : ils rendent le fichier déterministe à la
+relecture et au diff, mais ce ne sont **plus** eux qui portent le lien vers le service
+account.
+
+Ce plan n'est pas réécrit rétroactivement : c'est un artefact historique qui documente
+l'état des connaissances avant exécution. La correction faisant foi est dans
+`docs/superpowers/specs/2026-09-07-sorabel-idp-docker-design.md` §5.3, document durable
+référencé depuis `docs/architecture/MCP.md`.

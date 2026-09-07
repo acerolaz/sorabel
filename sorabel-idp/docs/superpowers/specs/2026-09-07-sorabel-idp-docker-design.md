@@ -107,7 +107,9 @@ Realm `sorabel-data-gate`, rôles de realm `role-support`, `role-sales`, `role-d
 
 1. **Le rôle du service account ne se déclare pas dans le bloc du client.** Il passe par
    un utilisateur `service-account-bot-slack-support` dans la section `users`, avec
-   `realmRoles: ["role-support"]`. Omis, le client s'authentifie sans obtenir aucun rôle.
+   `realmRoles: ["role-support"]`. Le lien vers le client se fait par le champ
+   `serviceAccountClientId`, qui prend le **`clientId`** (`bot-slack-support`), pas
+   l'`id` UUID interne du client. Omis, le client s'authentifie sans obtenir aucun rôle.
 2. **Utilisateurs de dev** : `u-sales` et `u-dev`, chacun porteur du rôle de realm
    correspondant — les deux clients PKCE nécessitent un utilisateur pour se connecter.
    Mot de passe injecté par variable d'environnement (§6).
