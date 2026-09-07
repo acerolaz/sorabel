@@ -1,8 +1,12 @@
 using Sorabel.ApiGateway.Infrastructure.Correlation;
+using Sorabel.ApiGateway.Infrastructure.Resilience;
+using Yarp.ReverseProxy.Forwarder;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddJsonFile("appsettings.Routes.json", optional: false, reloadOnChange: true);
+
+builder.Services.AddSingleton<IForwarderHttpClientFactory, ResilientForwarderHttpClientFactory>();
 
 builder.Services
     .AddReverseProxy()
