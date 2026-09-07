@@ -4,9 +4,9 @@
 
 **Goal:** Livrer une stack Docker Keycloak pour `sorabel-idp` qui émet des JWT porteurs du claim `sorabel_profile`, configurée intégralement par un export de realm versionné.
 
-**Architecture :** Un unique service Keycloak `start-dev --import-realm` (base H2 éphémère, aucun volume de données), attaché à un réseau Docker externe partagé sous le nom d'hôte `sorabel-idp`. L'export JSON est la seule source de configuration du realm. Les secrets n'existent que dans un `.env` local, injectés dans l'export par substitution d'environnement. Un script de smoke prouve l'émission du token et le contenu du claim.
+**Architecture :** Un unique service Keycloak `start-dev --import-realm` (base H2 éphémère, aucun volume de données), attaché à un réseau Docker externe partagé sous le nom d'hôte `sorabel-idp`. L'export JSON est la seule source de configuration *structurelle* du realm (rôles, clients, mappers, utilisateurs). Les secrets n'existent que dans un `.env` local ; la substitution `${env.…}` dans l'export s'étant révélée inopérante sur Keycloak 26.7.3 à l'exécution, ils sont appliqués après coup par `scripts/bootstrap-secrets.sh` via `kcadm.sh` (voir la note de correction en fin de document). Un script de smoke prouve l'émission du token et le contenu du claim.
 
-**Tech Stack :** Docker Compose, Keycloak 26.7.3 (image officielle quay.io), bash, curl, jq, python3.
+**Tech Stack :** Docker Compose, Keycloak 26.7.3 (image officielle quay.io), bash, curl, python3.
 
 **Spec :** `sorabel-idp/docs/superpowers/specs/2026-09-07-sorabel-idp-docker-design.md`
 
@@ -257,6 +257,12 @@ Attendu maintenant : `404` (le realm n'existe pas). Cette même commande devra r
 - [ ] **Step 2: Écrire l'export de realm (première couche : rôles + client bot)**
 
 Les `id` des clients sont **fixés en dur** volontairement : la section `users` doit référencer le client par son id interne via `serviceAccountClientLink`, et un id fixe rend cette référence déterministe au lieu de dépendre d'un UUID généré à l'import.
+
+> **Correction post-implémentation (voir la note en fin de document) : ce champ n'existe
+> pas.** Le champ réellement lu par Keycloak est `serviceAccountClientId`, et il attend le
+> `clientId` du client (`bot-slack-support`), pas son `id` UUID interne. Ce qui suit dans
+> cette tâche reflète l'état des connaissances *avant* exécution — ne pas le suivre
+> littéralement, se référer à `realm-export/sorabel-data-gate.json` et à la spec §5.3.
 
 ```bash
 cat > realm-export/sorabel-data-gate.json <<'EOF'

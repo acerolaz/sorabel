@@ -49,7 +49,10 @@ flowchart LR
 > choix : le mapper de rôles natif produit un tableau préfixé (`["role-sales"]`) là où `mcp`
 > attend une chaîne, et `bot-slack-support` s'authentifie en `client_credentials` — sans
 > utilisateur, donc sans rôle utilisateur à lire. Les rôles de realm restent définis comme
-> point d'extension, mais ne sont aujourd'hui lus par personne.
+> point d'extension : ils **ne pilotent pas** le claim et ne sont lus par aucun service
+> (ni `mcp`, ni `api-gateway`). `scripts/smoke.sh` vérifie leur présence dans
+> `realm_access.roles` du token — pas parce qu'un service les consomme, mais comme preuve
+> que le câblage du service account (§5.3 de la spec) fonctionne.
 
 > Analogie .NET : le Protocol Mapper joue le rôle d'un `ClaimsTransformation` custom exécuté côté IdP plutôt que côté API — le claim `sorabel_profile` arrive déjà prêt dans le JWT, `mcp/` n'a plus qu'à le lire.
 
@@ -75,7 +78,11 @@ cp .env.example .env
 
 `.env` n'est jamais commité. Aucun secret n'a de valeur par défaut : un `.env` absent
 ou incomplet fait échouer `docker compose up` avec un message explicite, plutôt que de
-démarrer sur une valeur faible.
+démarrer sur une valeur faible. Ceci vaut aussi pour les utilisateurs de dev : l'export
+de realm ne leur attribue **aucun mot de passe** (voir plus bas), donc tant que
+`./scripts/bootstrap-secrets.sh` n'a pas tourné, `u-sales`/`u-dev` ne peuvent tout
+simplement pas s'authentifier — l'état par défaut est fermé, jamais un mot de passe
+connu.
 
 ### Démarrage et vérification
 
@@ -86,11 +93,14 @@ docker compose up -d --wait          # attend que le healthcheck passe
 ```
 
 Sur cette version de Keycloak (26.7.3), la substitution `${env.…}` de l'export de realm
-ne fonctionne pas : les emplacements de secret sont importés tels quels (la chaîne
-littérale `${env.SORABEL_IDP_BOT_CLIENT_SECRET}`, par exemple), jamais remplacés par leur
-valeur. `./scripts/bootstrap-secrets.sh` applique donc après coup, via `kcadm.sh`, le
-secret du client `bot-slack-support` et les mots de passe des utilisateurs de dev
-`u-sales`/`u-dev` — c'est une étape **obligatoire** du démarrage, pas un repli optionnel.
+ne fonctionne pas. L'export en tient compte : il ne porte **aucun emplacement de secret**
+nulle part — ni `${env.…}` ni valeur en clair. Le client `bot-slack-support` n'a pas de
+champ `secret` du tout (Keycloak lui en génère un aléatoire à l'import), et les
+utilisateurs `u-sales`/`u-dev` n'ont pas de bloc `credentials` (donc pas de mot de passe
+tant que le bootstrap n'a pas tourné, cf. §3). `./scripts/bootstrap-secrets.sh` applique
+après coup, via `kcadm.sh`, le secret du client `bot-slack-support` et les mots de passe
+des utilisateurs de dev `u-sales`/`u-dev` — c'est une étape **obligatoire** du démarrage,
+pas un repli optionnel.
 
 **La base étant éphémère**, Keycloak régénère un secret client aléatoire à chaque import
 et n'affecte aucun mot de passe aux utilisateurs de dev : `./scripts/bootstrap-secrets.sh`
@@ -143,6 +153,12 @@ Ni `Makefile`, ni `Dockerfile`, ni code applicatif : ce projet est de la configu
 ## 5. Règle de gouvernance
 
 Le realm est **versionné via export JSON** (`realm-export/sorabel-data-gate.json`). Toute modification (rôle, client, mapper) doit être répercutée dans cet export — **jamais** de modification silencieuse uniquement en base, sous peine de dérive entre environnements.
+
+Cet export est **dev-scopé** (`sslRequired: none`, redirections `http://localhost` sur
+tout port/chemin, `webOrigins: ["+"]`) — c'est ce que documente le `displayName` du
+realm. Un déploiement réel ne doit **jamais** l'importer tel quel : il exige a minima
+`sslRequired: external`, des `redirectUris` réelles (pas de wildcard), et des
+`webOrigins` restreintes aux origines effectives des clients.
 
 ---
 

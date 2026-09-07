@@ -102,6 +102,10 @@ Realm `sorabel-data-gate`, rôles de realm `role-support`, `role-sales`, `role-d
   `MCP_JWT_AUDIENCE=sorabel-mcp` déjà déclaré dans le `.env.example` racine. L'audience
   *custom* est préférée à `included.client.audience` : elle évite de créer dans le realm
   un client `sorabel-mcp` fantôme dont le seul rôle serait d'être nommé dans un `aud`.
+  Keycloak sérialise `aud` en **tableau JSON** pour le client `client_credentials`
+  (`bot-slack-support`) et en **chaîne nue** pour les clients PKCE (`poste-vente`,
+  `ide-dev`) — les deux formes sont valides RFC 7519 ; `scripts/smoke.sh` normalise déjà
+  les deux, et le validateur JWT de `mcp` doit accepter l'une comme l'autre.
 
 ### 5.3 Deux pièges de l'import JSON
 
@@ -155,14 +159,22 @@ défaut** — même comportement que `POSTGRES_PASSWORD` à la racine : l'absenc
 fait échouer `docker compose up` avec un message actionnable, plutôt que de démarrer
 silencieusement sur une valeur faible.
 
-Dans l'export JSON, les emplacements de secret portent la syntaxe de substitution
-d'environnement native de Keycloak (`${env.SORABEL_IDP_BOT_CLIENT_SECRET}`), pour garder
-le fichier versionnable sans secret.
+**Vérifié à l'implémentation : la substitution `${env.…}` ne fonctionne pas sur le tag
+retenu (Keycloak 26.7.3)**, ce qui a changé la façon dont l'export gère le secret. Une
+chaîne `${env.…}` importée telle quelle serait stockée comme secret **littéral et
+lisible par quiconque lit ce fichier versionné** — inacceptable. L'export ne porte donc
+**aucun emplacement de secret** :
 
-**Vérifié à l'implémentation : la substitution ne fonctionne pas sur le tag retenu
-(Keycloak 26.7.3).** Le secret est importé tel quel — la chaîne littérale de 36 caractères
-`${env.SORABEL_IDP_BOT_CLIENT_SECRET}` — plutôt que remplacé par sa valeur ; même
-constat pour les mots de passe des utilisateurs de dev. Le mécanisme **livré** n'est donc
+- `bot-slack-support` n'a **pas** de champ `secret` du tout : Keycloak lui en génère un
+  aléatoire à l'import, immédiatement écrasé par `bootstrap-secrets.sh` (voir plus bas).
+- `u-sales` et `u-dev` n'ont **pas** de bloc `credentials` : sans substitution
+  opérante, y laisser `${env.SORABEL_IDP_DEV_USER_PASSWORD}` aurait fait de cette chaîne
+  de 36 caractères, connue de quiconque lit le dépôt, le mot de passe réel de ces deux
+  comptes tant que le bootstrap n'a pas tourné. Un utilisateur sans `credentials` ne peut
+  pas s'authentifier : l'état par défaut est fermé (fail-closed), pas un mot de passe
+  connu (fail-known).
+
+Le mécanisme **livré** n'est donc
 pas la substitution mais le repli prévu d'avance : `scripts/bootstrap-secrets.sh` applique
 secret client et mots de passe via `kcadm.sh` après le boot. Conséquence opérationnelle :
 la base étant éphémère, Keycloak régénère un secret client aléatoire à chaque import — ce
@@ -223,7 +235,8 @@ modifie pas le compose racine.
 ## 9. Vérification
 
 `scripts/smoke.sh`, exécutable en une commande après `docker compose up -d --wait`,
-vérifie ses prérequis (`curl`, `jq`) puis enchaîne :
+vérifie ses prérequis (`curl`, `python3` — pas `jq`, le décodage du payload JWT passe par
+`python3`) puis enchaîne :
 
 1. `GET /realms/sorabel-data-gate/protocol/openid-connect/certs` → au moins une clé
    présente.
@@ -254,6 +267,9 @@ sorabel-idp/
 ├── scripts/
 │   ├── smoke.sh                       # nouveau
 │   └── bootstrap-secrets.sh           # nouveau — mécanisme livré, ${env.…} inopérant sur 26.7.3
+├── docs/superpowers/
+│   ├── specs/                         # ce document
+│   └── plans/                         # plan d'implémentation
 └── .claude/
     └── settings.json                  # permissions docker à compléter
 ```
@@ -269,7 +285,10 @@ Reprennent les critères de succès du `CLAUDE.md` local, rendus vérifiables :
 3. `scripts/smoke.sh` sort avec le code 0 et affiche le claim `sorabel_profile` décodé.
 4. Aucun secret, mot de passe ni identifiant admin en clair dans un fichier versionné —
    vérifiable par relecture du diff.
-5. `realm-export/sorabel-data-gate.json` est la seule source de configuration du realm :
-   aucune étape manuelle en console d'admin n'est requise pour atteindre les critères 1 à 3.
+5. `realm-export/sorabel-data-gate.json` est la seule source de configuration
+   **structurelle** du realm (rôles, clients, mappers, utilisateurs) : aucune étape
+   manuelle en console d'admin n'est requise pour atteindre les critères 1 à 3. Les
+   secrets (secret client, mots de passe de dev) ne viennent pas de l'export — ils sont
+   appliqués après coup par `scripts/bootstrap-secrets.sh` (§6).
 6. Aucun `Makefile`, aucun `Dockerfile`, aucune couche applicative ajoutée.
 7. `sorabel-idp/README.md` ne contredit plus la dérivation réelle du claim (§5.4).
