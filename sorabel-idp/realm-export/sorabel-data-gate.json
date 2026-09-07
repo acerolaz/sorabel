@@ -1,5 +1,6 @@
 {
   "realm": "sorabel-data-gate",
+  "displayName": "Sorabel Data Gate (DEV — sslRequired:none, localhost redirects)",
   "enabled": true,
   "sslRequired": "none",
   "accessTokenLifespan": 300,
@@ -176,13 +177,6 @@
       "emailVerified": true,
       "firstName": "Utilisateur",
       "lastName": "Vente",
-      "credentials": [
-        {
-          "type": "password",
-          "value": "${env.SORABEL_IDP_DEV_USER_PASSWORD}",
-          "temporary": false
-        }
-      ],
       "realmRoles": [
         "role-sales"
       ],
@@ -195,13 +189,6 @@
       "emailVerified": true,
       "firstName": "Utilisateur",
       "lastName": "Dev",
-      "credentials": [
-        {
-          "type": "password",
-          "value": "${env.SORABEL_IDP_DEV_USER_PASSWORD}",
-          "temporary": false
-        }
-      ],
       "realmRoles": [
         "role-dev"
       ],
