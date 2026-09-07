@@ -27,15 +27,18 @@ public class RetryHandlerTests
         };
 
     private static async Task<(int Appels, Exception? Erreur)> Envoyer(
-        HttpRequestMessage requete, Func<int, HttpResponseMessage> comportement)
+        HttpRequestMessage requete,
+        Func<int, HttpResponseMessage> comportement,
+        CancellationToken cancellationToken = default)
     {
+        using var _ = requete; // libère aussi le StringContent éventuel du corps.
         var inner = new HandlerCompteur(comportement);
         using var invoker = new HttpMessageInvoker(
             new RetryHandler(NullLogger.Instance) { InnerHandler = inner });
 
         try
         {
-            await invoker.SendAsync(requete, CancellationToken.None);
+            await invoker.SendAsync(requete, cancellationToken);
             return (inner.Appels, null);
         }
         catch (Exception ex)
@@ -100,5 +103,21 @@ public class RetryHandlerTests
 
         Assert.Equal(1, appels);
         Assert.Null(erreur);
+    }
+
+    // Une annulation pendant le backoff (et non au moment de l'appel réseau
+    // lui-même) ne doit pas non plus déclencher une deuxième exécution.
+    [Fact]
+    public async Task N_appelle_pas_une_deuxieme_fois_si_annule_pendant_le_backoff()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+
+        var (appels, erreur) = await Envoyer(
+            Requete(avecCorps: false),
+            _ => throw new HttpRequestException(HttpRequestError.ConnectionError),
+            cts.Token);
+
+        Assert.Equal(1, appels);
+        Assert.IsType<TaskCanceledException>(erreur);
     }
 }

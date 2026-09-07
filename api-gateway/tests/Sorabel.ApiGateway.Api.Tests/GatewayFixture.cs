@@ -24,7 +24,19 @@ public sealed class GatewayFixture : IDisposable
     }
 
     /// <param name="destinations">clusterId → adresse de base du backend.</param>
-    public HttpClient CreateClient(IReadOnlyDictionary<string, string> destinations)
+    public HttpClient CreateClient(IReadOnlyDictionary<string, string> destinations) =>
+        CreateFactory(destinations).CreateClient();
+
+    /// <summary>
+    /// Expose le conteneur DI de l'hôte en mémoire, pour vérifier une
+    /// composition de services (ex. quelle implémentation a été résolue)
+    /// sans passer par une requête HTTP.
+    /// </summary>
+    /// <param name="destinations">clusterId → adresse de base du backend.</param>
+    public IServiceProvider CreateServices(IReadOnlyDictionary<string, string> destinations) =>
+        CreateFactory(destinations).Services;
+
+    private WebApplicationFactory<Program> CreateFactory(IReadOnlyDictionary<string, string> destinations)
     {
         var overrides = destinations.ToDictionary(
             kv => $"ReverseProxy:Clusters:{kv.Key}:Destinations:d1:Address",
@@ -35,7 +47,7 @@ public sealed class GatewayFixture : IDisposable
                 (_, config) => config.AddInMemoryCollection(overrides)));
 
         _factories.Add(factory);
-        return factory.CreateClient();
+        return factory;
     }
 
     public void Dispose()
