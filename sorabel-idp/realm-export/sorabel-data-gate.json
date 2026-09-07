@@ -5,9 +5,18 @@
   "accessTokenLifespan": 300,
   "roles": {
     "realm": [
-      { "name": "role-support", "description": "Profil support (bot Slack). Ne pilote pas le claim sorabel_profile." },
-      { "name": "role-sales", "description": "Profil vente (poste de vente). Ne pilote pas le claim sorabel_profile." },
-      { "name": "role-dev", "description": "Profil developpeur (IDE). Ne pilote pas le claim sorabel_profile." }
+      {
+        "name": "role-support",
+        "description": "Profil support (bot Slack). Ne pilote pas le claim sorabel_profile."
+      },
+      {
+        "name": "role-sales",
+        "description": "Profil vente (poste de vente). Ne pilote pas le claim sorabel_profile."
+      },
+      {
+        "name": "role-dev",
+        "description": "Profil developpeur (IDE). Ne pilote pas le claim sorabel_profile."
+      }
     ]
   },
   "clients": [
@@ -22,7 +31,34 @@
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "fullScopeAllowed": true
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "sorabel-profile",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "sorabel_profile",
+            "claim.value": "support",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "sorabel-mcp-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "sorabel-mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -30,7 +66,9 @@
       "username": "service-account-bot-slack-support",
       "enabled": true,
       "serviceAccountClientId": "bot-slack-support",
-      "realmRoles": ["role-support"]
+      "realmRoles": [
+        "role-support"
+      ]
     }
   ]
 }
