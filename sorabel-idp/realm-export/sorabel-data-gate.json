@@ -1,0 +1,36 @@
+{
+  "realm": "sorabel-data-gate",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      { "name": "role-support", "description": "Profil support (bot Slack). Ne pilote pas le claim sorabel_profile." },
+      { "name": "role-sales", "description": "Profil vente (poste de vente). Ne pilote pas le claim sorabel_profile." },
+      { "name": "role-dev", "description": "Profil developpeur (IDE). Ne pilote pas le claim sorabel_profile." }
+    ]
+  },
+  "clients": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "clientId": "bot-slack-support",
+      "name": "Bot Slack Support",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "fullScopeAllowed": true
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-bot-slack-support",
+      "enabled": true,
+      "serviceAccountClientId": "bot-slack-support",
+      "realmRoles": ["role-support"]
+    }
+  ]
+}
