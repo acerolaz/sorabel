@@ -3,7 +3,6 @@
 @../CLAUDE.md
 @../.claude/rules/csharp-clean-architecture.md
 @../.claude/rules/makefile-conventions.md
-@../.claude/rules/docker-conventions.md
 @../.claude/rules/api-contracts.md
 @../.claude/rules/security.md
 
@@ -17,7 +16,7 @@ ni par un client, ni entre eux.
 - Ne jamais implémenter de logique d'autorisation ou de matrice RBAC ici — portée par `mcp/`
 - Relayer les JWT de façon transparente, sans inspecter signature/claims — c'est le rôle du serveur MCP
 - Rester le seul chemin de sortie vers Keycloak, `mcp`, `text2sql-ai`, `sorabelsql-api`, `rag-hybride`
-- Toujours buildable via `make build && make test && make lint` ; la cible Docker est à activer dès qu'un `Dockerfile`/Compose est ajouté
+- Toujours buildable et démarrable via `make docker-build && make docker-up`
 - Aucune règle métier ne doit fuiter dans la couche de routage
 
 ## Règles strictes
@@ -38,7 +37,7 @@ ni par un client, ni entre eux.
 - Backend cible indisponible → erreur de routage standardisée (502/504), jamais de repli silencieux vers un autre backend
 
 ## Critères de succès
-- `make build && make test && make lint` passent
+- `make build && make test && make lint` passent, et `make test-e2e` passe avec Docker démarré
 - `make docker-build && make docker-up` réussissent
 - Aucune ligne de code n'interprète un rôle, un claim ou la matrice RBAC
 

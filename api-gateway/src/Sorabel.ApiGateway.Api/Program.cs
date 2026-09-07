@@ -14,7 +14,7 @@ if (args.Contains("--healthcheck"))
         var reponse = await sonde.GetAsync("http://localhost:8080/health");
         return reponse.IsSuccessStatusCode ? 0 : 1;
     }
-    catch (HttpRequestException)
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
     {
         return 1;
     }

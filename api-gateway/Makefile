@@ -9,7 +9,7 @@ test:
 	dotnet test --filter "Category!=E2E"
 
 test-e2e:
-	docker compose up -d --build --wait
+	docker compose up -d --build --wait || (docker compose down; exit 1)
 	dotnet test --filter "Category=E2E" ; status=$$? ; docker compose down ; exit $$status
 
 lint:

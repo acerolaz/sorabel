@@ -48,10 +48,11 @@ flowchart LR
 
 ```bash
 make build         # dotnet build
-make test          # dotnet test
+make test          # dotnet test (niveaux 1 à 3, sans Docker)
+make test-e2e      # tests de bout en bout (démarre les conteneurs)
 make lint          # dotnet format --verify-no-changes
-# TODO: ajouter Dockerfile + docker compose pour activer docker-build/docker-up
-# (pour l'instant, seul `docker compose` à la racine démarre Postgres)
+make docker-build   # construit l'image Docker
+make docker-up      # démarre le service via docker compose
 ```
 
 ## Configuration des routes
@@ -63,7 +64,7 @@ une route, utiliser la commande dédiée plutôt qu'une édition manuelle :
 /new-route
 ```
 
-Chaque route backend porte son propre timeout et sa politique de retry (résilience type Polly).
+Table complète des routes, clusters et timeouts : `.claude/rules/routing-proxy.md`.
 
 ## Documents liés
 
