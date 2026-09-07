@@ -22,7 +22,10 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?KC_BOOTSTRAP_ADMIN_PASSWORD doit être défini — copier .env.example vers .env}
-      # Consommés par la substitution ${env.…} de l'export de realm.
+      # Consommées côté conteneur, mais pas par l'export de realm : la substitution
+      # ${env.…} n'est pas opérante sur cette version de Keycloak. C'est
+      # scripts/bootstrap-secrets.sh qui les lit pour appliquer le secret client et
+      # les mots de passe de dev après le démarrage.
       SORABEL_IDP_BOT_CLIENT_SECRET: ${SORABEL_IDP_BOT_CLIENT_SECRET:?SORABEL_IDP_BOT_CLIENT_SECRET doit être défini — copier .env.example vers .env}
       SORABEL_IDP_DEV_USER_PASSWORD: ${SORABEL_IDP_DEV_USER_PASSWORD:?SORABEL_IDP_DEV_USER_PASSWORD doit être défini — copier .env.example vers .env}
       # Verrouille l'identité publique : sans cela, un token obtenu de conteneur à
