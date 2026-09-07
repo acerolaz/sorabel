@@ -7,7 +7,7 @@ using Yarp.ReverseProxy.Model;
 namespace Sorabel.ApiGateway.Infrastructure.Logging;
 
 /// <summary>
-/// Une ligne structurée par requête relayée : identifiant de corrélation,
+/// Une ligne structurée par requête : identifiant de corrélation,
 /// méthode, chemin entrant, backend, statut, durée.
 ///
 /// Aucun en-tête n'est journalisé — c'est une liste d'autorisation de champs,
