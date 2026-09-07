@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sorabel.ApiGateway.Domain\Sorabel.ApiGateway.Domain.csproj" />
+    <ProjectReference Include="..\Sorabel.ApiGateway.Infrastructure\Sorabel.ApiGateway.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

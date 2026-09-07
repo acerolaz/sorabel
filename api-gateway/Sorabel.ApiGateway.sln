@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sorabel.ApiGateway.Api", "s
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sorabel.ApiGateway.Api.Tests", "tests\Sorabel.ApiGateway.Api.Tests\Sorabel.ApiGateway.Api.Tests.csproj", "{8B965343-7466-4B63-BC37-98143487B173}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sorabel.ApiGateway.Infrastructure", "src\Sorabel.ApiGateway.Infrastructure\Sorabel.ApiGateway.Infrastructure.csproj", "{C230B5BC-0341-4801-85D1-261C54BAD667}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{8B965343-7466-4B63-BC37-98143487B173}.Release|x64.Build.0 = Release|Any CPU
 		{8B965343-7466-4B63-BC37-98143487B173}.Release|x86.ActiveCfg = Release|Any CPU
 		{8B965343-7466-4B63-BC37-98143487B173}.Release|x86.Build.0 = Release|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Debug|x64.Build.0 = Debug|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Debug|x86.Build.0 = Debug|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Release|x64.ActiveCfg = Release|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Release|x64.Build.0 = Release|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Release|x86.ActiveCfg = Release|Any CPU
+		{C230B5BC-0341-4801-85D1-261C54BAD667}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -80,5 +94,6 @@ Global
 		{3BF349DF-3717-47FD-A123-4198FDA9D748} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{913A9172-2B07-43D1-B1C4-8BA3B1D53E8C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{8B965343-7466-4B63-BC37-98143487B173} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{C230B5BC-0341-4801-85D1-261C54BAD667} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
