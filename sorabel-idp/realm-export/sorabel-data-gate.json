@@ -185,7 +185,9 @@
       ],
       "realmRoles": [
         "role-sales"
-      ]
+      ],
+      "email": "u-sales@sorabel.local",
+      "requiredActions": []
     },
     {
       "username": "u-dev",
@@ -202,7 +204,9 @@
       ],
       "realmRoles": [
         "role-dev"
-      ]
+      ],
+      "email": "u-dev@sorabel.local",
+      "requiredActions": []
     }
   ]
 }
