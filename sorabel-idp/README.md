@@ -57,13 +57,62 @@ flowchart LR
 
 ## 3. Démarrage
 
+### Prérequis, une seule fois
+
+Le service est attaché à un réseau Docker partagé entre les composes de la solution :
+
 ```bash
-docker compose up -d
+docker network create sorabel
 ```
 
-Pas de `Makefile`, pas de `make build`/`make test` : le cycle de vie est intégralement piloté par `docker compose` (image officielle, pas de build custom).
+### Configuration locale
 
-Console d'admin Keycloak : `http://localhost:<port>` (cf. `docker-compose.yml` pour le port exposé et les identifiants admin, jamais commités en clair).
+```bash
+cp .env.example .env
+# puis renseigner KC_BOOTSTRAP_ADMIN_PASSWORD, SORABEL_IDP_BOT_CLIENT_SECRET
+# et SORABEL_IDP_DEV_USER_PASSWORD
+```
+
+`.env` n'est jamais commité. Aucun secret n'a de valeur par défaut : un `.env` absent
+ou incomplet fait échouer `docker compose up` avec un message explicite, plutôt que de
+démarrer sur une valeur faible.
+
+### Démarrage et vérification
+
+```bash
+docker compose up -d --wait          # attend que le healthcheck passe
+./scripts/bootstrap-secrets.sh       # applique le secret client et les mots de passe de dev
+./scripts/smoke.sh                   # prouve JWKS, émission du token, claim, aud et iss
+```
+
+Sur cette version de Keycloak (26.7.3), la substitution `${env.…}` de l'export de realm
+ne fonctionne pas : les emplacements de secret sont importés tels quels (la chaîne
+littérale `${env.SORABEL_IDP_BOT_CLIENT_SECRET}`, par exemple), jamais remplacés par leur
+valeur. `./scripts/bootstrap-secrets.sh` applique donc après coup, via `kcadm.sh`, le
+secret du client `bot-slack-support` et les mots de passe des utilisateurs de dev
+`u-sales`/`u-dev` — c'est une étape **obligatoire** du démarrage, pas un repli optionnel.
+
+**La base étant éphémère**, Keycloak régénère un secret client aléatoire à chaque import
+et n'affecte aucun mot de passe aux utilisateurs de dev : `./scripts/bootstrap-secrets.sh`
+doit donc être rejoué après **chaque** `docker compose down`/`up`, pas seulement au tout
+premier démarrage.
+
+Pas de `Makefile`, pas de `make build`/`make test` : le cycle de vie est intégralement
+piloté par `docker compose` (image officielle, aucun build custom).
+
+La base est **éphémère** (`start-dev`, H2 en mémoire, aucun volume de données) : c'est
+délibéré. `realm-export/sorabel-data-gate.json` est ainsi la seule source de vérité du
+realm, et la dérive entre la base et l'export est structurellement impossible. En
+contrepartie, **rien de ce qui est modifié dans la console d'admin ne survit à un
+`docker compose down`** — tout changement doit passer par l'export.
+
+Un changement dans l'export ne prend effet qu'au **démarrage** : `docker compose down &&
+docker compose up -d --wait`, pas un simple `restart` — puis rejouer
+`./scripts/bootstrap-secrets.sh`.
+
+Console d'admin : `http://localhost:8080` (identifiants issus du `.env`). En `start-dev`,
+la console partage le port applicatif : ce compose est destiné au développement local,
+pas à un déploiement exposé.
 
 ---
 
@@ -73,12 +122,21 @@ Console d'admin Keycloak : `http://localhost:<port>` (cf. `docker-compose.yml` p
 sorabel-idp/
 ├── README.md
 ├── CLAUDE.md
-├── docker-compose.yml         # Image Keycloak officielle
+├── docker-compose.yml          # Image Keycloak officielle 26.7.3, aucun build
+├── .env.example                # Variables attendues (sans valeurs)
 ├── realm-export/
-│   └── sorabel-data-gate.json # Export versionné du realm (source de vérité)
+│   └── sorabel-data-gate.json  # Export versionné du realm (source de vérité)
+├── scripts/
+│   ├── smoke.sh                 # Vérification : JWKS, token, claim, aud, iss
+│   └── bootstrap-secrets.sh     # Applique secret client + mots de passe de dev après boot
+├── docs/superpowers/
+│   ├── specs/                   # Design de la solution Docker
+│   └── plans/                   # Plan d'implémentation
 └── .claude/
-    └── settings.json          # Permissions/config docker uniquement
+    └── settings.json           # Permissions/config docker uniquement
 ```
+
+Ni `Makefile`, ni `Dockerfile`, ni code applicatif : ce projet est de la configuration.
 
 ---
 

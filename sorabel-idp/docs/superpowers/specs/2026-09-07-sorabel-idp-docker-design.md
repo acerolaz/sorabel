@@ -153,16 +153,24 @@ défaut** — même comportement que `POSTGRES_PASSWORD` à la racine : l'absenc
 fait échouer `docker compose up` avec un message actionnable, plutôt que de démarrer
 silencieusement sur une valeur faible.
 
-Dans l'export JSON, les emplacements de secret utilisent la substitution d'environnement
-native de Keycloak (`${env.SORABEL_IDP_BOT_CLIENT_SECRET}`), ce qui garde le fichier
-versionnable sans secret.
+Dans l'export JSON, les emplacements de secret portent la syntaxe de substitution
+d'environnement native de Keycloak (`${env.SORABEL_IDP_BOT_CLIENT_SECRET}`), pour garder
+le fichier versionnable sans secret.
 
-**Risque identifié, à lever en premier à l'implémentation.** C'est le seul point de ce
-design qui ne peut pas être affirmé sans exécution : le comportement de la substitution
-d'environnement à l'import a varié selon les versions de Keycloak. Repli arrêté d'avance
-si elle ne fonctionne pas sur le tag retenu — un `scripts/bootstrap-secrets.sh` appliquant
-secret client et mots de passe via `kcadm.sh` après le boot : davantage de pièces
-mobiles, garantie identique qu'aucun secret n'est commité.
+**Vérifié à l'implémentation : la substitution ne fonctionne pas sur le tag retenu
+(Keycloak 26.7.3).** Le secret est importé tel quel — la chaîne littérale de 36 caractères
+`${env.SORABEL_IDP_BOT_CLIENT_SECRET}` — plutôt que remplacé par sa valeur ; même
+constat pour les mots de passe des utilisateurs de dev. Le mécanisme **livré** n'est donc
+pas la substitution mais le repli prévu d'avance : `scripts/bootstrap-secrets.sh` applique
+secret client et mots de passe via `kcadm.sh` après le boot. Conséquence opérationnelle :
+la base étant éphémère, Keycloak régénère un secret client aléatoire à chaque import — ce
+script doit être rejoué après **chaque** `docker compose down`/`up`, pas seulement au
+premier démarrage.
+
+**Risque résiduel assumé.** `kcadm.sh config credentials`/`update` reçoit le secret en
+argument de ligne de commande (`-s secret=…`), brièvement visible dans la table des
+processus de l'hôte le temps de l'appel. Acceptable pour un bootstrap de dev local sur un
+conteneur éphémère, mais à ne pas taire.
 
 ## 7. Identité de l'issuer
 
@@ -242,7 +250,8 @@ sorabel-idp/
 ├── realm-export/
 │   └── sorabel-data-gate.json         # nouveau
 ├── scripts/
-│   └── smoke.sh                       # nouveau
+│   ├── smoke.sh                       # nouveau
+│   └── bootstrap-secrets.sh           # nouveau — mécanisme livré, ${env.…} inopérant sur 26.7.3
 └── .claude/
     └── settings.json                  # permissions docker à compléter
 ```

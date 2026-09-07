@@ -1,6 +1,12 @@
 {
   "permissions": {
-    "allow": [],
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(docker network create sorabel)",
+      "Bash(docker network ls:*)",
+      "Bash(./scripts/smoke.sh)",
+      "Bash(./scripts/bootstrap-secrets.sh)"
+    ],
     "deny": []
   }
 }
