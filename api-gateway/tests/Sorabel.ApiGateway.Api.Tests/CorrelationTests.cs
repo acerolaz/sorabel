@@ -23,6 +23,15 @@ public class CorrelationTests : IClassFixture<GatewayFixture>
         return (client, backend);
     }
 
+    // Prouve l'invariant plutôt que de le supposer : si WireMock ne renseignait pas
+    // la requête ou ses en-têtes, l'assertion échoue ici avec un message clair, pas
+    // plus loin avec une NullReferenceException sur une ligne arbitraire.
+    private static T RequireNotNull<T>(T? value) where T : class
+    {
+        Assert.NotNull(value);
+        return value;
+    }
+
     [Fact]
     public async Task Genere_un_identifiant_quand_le_client_n_en_fournit_pas()
     {
@@ -34,7 +43,9 @@ public class CorrelationTests : IClassFixture<GatewayFixture>
         Assert.False(string.IsNullOrWhiteSpace(renvoye));
 
         var recue = Assert.Single(backend.LogEntries);
-        var transmis = recue.RequestMessage!.Headers![CorrelationId.HeaderName].Single();
+        var requestMessage = RequireNotNull(recue.RequestMessage);
+        var headers = RequireNotNull(requestMessage.Headers);
+        var transmis = headers[CorrelationId.HeaderName].Single();
         Assert.Equal(renvoye, transmis);
     }
 
@@ -47,7 +58,9 @@ public class CorrelationTests : IClassFixture<GatewayFixture>
         var response = await client.GetAsync("/api/v1/mcp/call_tool");
 
         var recue = Assert.Single(backend.LogEntries);
-        Assert.Equal("trace-de-mcp-42", recue.RequestMessage!.Headers![CorrelationId.HeaderName].Single());
+        var requestMessage = RequireNotNull(recue.RequestMessage);
+        var headers = RequireNotNull(requestMessage.Headers);
+        Assert.Equal("trace-de-mcp-42", headers[CorrelationId.HeaderName].Single());
         Assert.Equal("trace-de-mcp-42", response.Headers.GetValues(CorrelationId.HeaderName).Single());
     }
 
@@ -60,7 +73,9 @@ public class CorrelationTests : IClassFixture<GatewayFixture>
         await client.GetAsync("/api/v1/mcp/call_tool");
 
         var recue = Assert.Single(backend.LogEntries);
-        var transmis = recue.RequestMessage!.Headers![CorrelationId.HeaderName].Single();
+        var requestMessage = RequireNotNull(recue.RequestMessage);
+        var headers = RequireNotNull(requestMessage.Headers);
+        var transmis = headers[CorrelationId.HeaderName].Single();
         Assert.NotEqual("valeur invalide!", transmis);
     }
 }

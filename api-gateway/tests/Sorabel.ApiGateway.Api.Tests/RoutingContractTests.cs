@@ -13,6 +13,15 @@ public class RoutingContractTests : IClassFixture<GatewayFixture>
 
     public RoutingContractTests(GatewayFixture fixture) => _fixture = fixture;
 
+    // Prouve l'invariant plutôt que de le supposer : si WireMock ne renseignait pas
+    // la requête ou ses en-têtes, l'assertion échoue ici avec un message clair, pas
+    // plus loin avec une NullReferenceException sur une ligne arbitraire.
+    private static T RequireNotNull<T>(T? value) where T : class
+    {
+        Assert.NotNull(value);
+        return value;
+    }
+
     // Les 6 routes du contrat, avec le cluster qu'elles doivent atteindre et le
     // chemin que le backend doit recevoir une fois le préfixe retiré.
     public static TheoryData<string, string, string> Routes => new()
@@ -46,7 +55,8 @@ public class RoutingContractTests : IClassFixture<GatewayFixture>
         Assert.Equal("ok", await response.Content.ReadAsStringAsync());
 
         var recue = Assert.Single(backend.LogEntries);
-        Assert.Equal(cheminAttendu, recue.RequestMessage!.Path);
+        var requestMessage = RequireNotNull(recue.RequestMessage);
+        Assert.Equal(cheminAttendu, requestMessage.Path);
     }
 
     // Non-négociable : le JWT traverse la gateway sans être lu ni modifié.
@@ -66,7 +76,9 @@ public class RoutingContractTests : IClassFixture<GatewayFixture>
         await client.GetAsync("/api/v1/mcp/call_tool");
 
         var recue = Assert.Single(backend.LogEntries);
-        Assert.Equal($"Bearer {jeton}", recue.RequestMessage!.Headers!["Authorization"].Single());
+        var requestMessage = RequireNotNull(recue.RequestMessage);
+        var headers = RequireNotNull(requestMessage.Headers);
+        Assert.Equal($"Bearer {jeton}", headers["Authorization"].Single());
     }
 
     [Fact]
