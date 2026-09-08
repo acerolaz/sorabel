@@ -1,4 +1,4 @@
-"""Fixtures des scénarios d'acceptance par persona (tests/acceptance).
+"""Fixtures des scénarios par persona (tests/contract, niveau 3).
 
 Ces tests assemblent le serveur exactement comme `build_server` (t13) le
 ferait en production — même matrice réelle (`access_matrix.yaml`), mêmes 13

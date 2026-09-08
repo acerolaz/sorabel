@@ -32,7 +32,7 @@ from app.api.governance import GovernedFastMCP
 from app.domain.errors import ToolError
 from app.infrastructure.stub.rag_stub import CITATION, RagStub
 
-from tests.acceptance.conftest import CORRELATION
+from tests.contract.conftest import CORRELATION
 
 Gateway = Callable[[str | None], AbstractContextManager[GovernedFastMCP]]
 
