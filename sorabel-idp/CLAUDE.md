@@ -47,7 +47,8 @@ du token). C'est `mcp/` qui valide signature, `iss`, `aud`, expiration, puis lit
 - Déployé exclusivement via `docker compose up` (image Keycloak officielle, jamais de fork/build custom)
 - Aucune règle d'architecture (hexagonale/clean archi) ni Makefile standard hérité — sans objet ici
 - Les realms/clients/rôles/mappers Keycloak sont versionnés via export JSON
-  (`realm-export/sorabel-data-gate.json`), jamais modifiés uniquement en base
+  (`realm-export/sorabel-data-gate.json`) pour la configuration **structurelle** (hors secrets)
+  — les secrets sont appliqués après boot via `scripts/bootstrap-secrets.sh`
 - Le realm reste `sorabel-data-gate` — un renommage impacte `mcp/` et `api-gateway`, jamais isolé
 - Un nouveau client MCP ⇒ un nouveau client OAuth Keycloak dédié (jamais de partage de client entre profils)
 - La matrice fine (profil × tool × ressources) ne doit jamais être répliquée ici — elle reste dans `mcp/`
