@@ -1,4 +1,4 @@
-# tests/test_routers/test_ingest_route.py
+# tests/contract/test_ingest_route.py
 import pytest
 from httpx import ASGITransport, AsyncClient
 

@@ -6,7 +6,7 @@
 serveur bas niveau. Ce module rassemble ce qu'il faut pour cela — doubles de
 ports compris — et il est l'unique copie : `tests/unit/test_governance.py`,
 `tests/unit/test_tool_perimeter.py`, `tests/unit/test_answer_question_composite.py`
-et `tests/acceptance/conftest.py` l'importent.
+et `tests/contract/conftest.py` l'importent.
 """
 
 import threading

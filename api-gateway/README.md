@@ -1,7 +1,7 @@
 # api-gateway
 
-Hub de routage pur pour la solution **Sorabel Data Gateway**. Analogie .NET : un reverse-proxy
-type **YARP/Ocelot**, positionné en hub central — pas un `[Authorize]`, juste un `DelegatingHandler`
+Hub de routage pur pour la solution **Sorabel Data Gateway**, implémenté avec **YARP**
+(`Yarp.ReverseProxy`), positionné en hub central — pas un `[Authorize]`, juste un `DelegatingHandler`
 géant devant tous les backends.
 
 ## Rôle dans l'architecture
@@ -41,7 +41,7 @@ flowchart LR
 |---|---|
 | Langage | C# (.NET) |
 | Architecture | Clean Architecture |
-| Pattern | Reverse-proxy (type YARP) |
+| Librairie de routage | [YARP](https://github.com/microsoft/reverse-proxy) (`Yarp.ReverseProxy`, NuGet) |
 | Déploiement | Docker (obligatoire, cf. convention transverse solution) |
 
 ## Démarrage rapide
@@ -54,6 +54,21 @@ make lint          # dotnet format --verify-no-changes
 make docker-build   # construit l'image Docker
 make docker-up      # démarre le service via docker compose
 ```
+
+### Où vivent les tests
+
+Un projet par niveau de `../.claude/rules/testing-pyramid.md`, tous sous `tests/`
+(sur disque **et** dans le dossier de solution `tests` du `.sln`) :
+
+| Projet | Niveau | Lancé par |
+|---|---|---|
+| `tests/Sorabel.ApiGateway.Domain.Tests/` | 1 — règles pures, aucune I/O | `make test` |
+| `tests/Sorabel.ApiGateway.Api.Tests/` | 2 et 3 — WireMock.Net, `WebApplicationFactory` | `make test` |
+| `tests/Sorabel.ApiGateway.E2E.Tests/` | 4 — conteneur réel (`[Trait("Category", "E2E")]`) | `make test-e2e` |
+
+`api-gateway` suit la forme **diamant** : socle unitaire fin, niveau 3 dominant —
+c'est la conséquence directe du non-négociable « aucune règle métier ne doit fuiter
+dans la couche de routage », pas un défaut de couverture.
 
 ## Configuration des routes
 

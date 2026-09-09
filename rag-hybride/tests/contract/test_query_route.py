@@ -1,4 +1,4 @@
-# tests/test_routers/test_query_route.py
+# tests/contract/test_query_route.py
 from datetime import date
 
 import pytest
