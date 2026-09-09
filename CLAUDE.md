@@ -169,10 +169,10 @@ résolue (pas contournée) avant de merger.
 
 ## graphify
 
-This project uses a graphify knowledge graph (god nodes, community structure, cross-file relationships). It is generated locally (`graphify .`) into graphify-out/ and not versioned — run it once before relying on the rules below.
+Ce projet utilise un graphe de connaissance graphify (god nodes, structure de communautés, relations inter-fichiers). Il est généré localement (`graphify .`) dans graphify-out/ et n'est pas versionné — lancez-le une fois avant de vous appuyer sur les règles ci-dessous.
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+Règles :
+- Pour une question sur le codebase, commencez par `graphify query "<question>"` lorsque graphify-out/graph.json existe. Utilisez `graphify path "<A>" "<B>"` pour les relations et `graphify explain "<concept>"` pour un concept. Ces commandes renvoient un sous-graphe ciblé, souvent plus petit que GRAPH_REPORT.md ou qu'un grep brut.
+- Si graphify-out/wiki/index.md existe, utilisez-le pour une navigation large plutôt que de parcourir les sources.
+- Ne lisez graphify-out/GRAPH_REPORT.md que pour une revue d'architecture large ou si query/path/explain ne suffisent pas.
+- Après modification du code, exécutez `graphify update .` pour garder le graphe à jour (AST-only, sans coût d'API).
