@@ -57,7 +57,7 @@ du token). C'est `mcp/` qui valide signature, `iss`, `aud`, expiration, puis lit
 ## Anti-patterns
 - Ne jamais ajouter de logique d'autorisation fine dans un Protocol Mapper ou un rôle Keycloak — le claim `sorabel_profile` reste grossier, la granularité est décidée par `mcp/`
 - Ne jamais committer d'identifiants admin Keycloak ou de secrets client OAuth en clair dans `docker-compose.yml` (cf. `scripts/bootstrap-secrets.sh`)
-- Ne jamais exposer le port d'admin Keycloak publiquement sans passer par `api-gateway`
+- Ne jamais exposer la console / les endpoints d'administration Keycloak publiquement ; limiter l'accès au réseau privé/VPN et n'exposer via `api-gateway` que les endpoints OIDC nécessaires
 
 ## Fallback
 - Si une demande porte sur la matrice d'accès fine (tool × collection × table) → rediriger vers `mcp/`, ne pas l'implémenter ici
