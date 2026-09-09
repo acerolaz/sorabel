@@ -1,4 +1,4 @@
-# sorabel-idp | Context v1.1 | Updated: 2026-09-06
+# sorabel-idp | Context v1.2 | Updated: 2026-09-09
 
 @../CLAUDE.md
 
@@ -44,16 +44,30 @@ du token). C'est `mcp/` qui valide signature, `iss`, `aud`, expiration, puis lit
 `sorabel_profile` pour appliquer sa propre matrice.
 
 ## Non-négociables
-- Déployé exclusivement via `docker compose up` (image Keycloak officielle, jamais de fork custom)
-- Aucune règle d'architecture (hexagonale/clean archi) ni Makefile standard hérité
-- Les realms/clients Keycloak sont versionnés (export JSON), jamais modifiés uniquement en base
+- Déployé exclusivement via `docker compose up` (image Keycloak officielle, jamais de fork/build custom)
+- Aucune règle d'architecture (hexagonale/clean archi) ni Makefile standard hérité — sans objet ici
+- Les realms/clients/rôles/mappers Keycloak sont versionnés via export JSON
+  (`realm-export/sorabel-data-gate.json`) pour la configuration **structurelle** (hors secrets)
+  — les secrets sont appliqués après boot via `scripts/bootstrap-secrets.sh`
 - Le realm reste `sorabel-data-gate` — un renommage impacte `mcp/` et `api-gateway`, jamais isolé
 - Un nouveau client MCP ⇒ un nouveau client OAuth Keycloak dédié (jamais de partage de client entre profils)
 - La matrice fine (profil × tool × ressources) ne doit jamais être répliquée ici — elle reste dans `mcp/`
+- Aucun accès direct client → `sorabel-idp` : seul `api-gateway` relaie les requêtes d'authentification
+
+## Anti-patterns
+- Ne jamais ajouter de logique d'autorisation fine dans un Protocol Mapper ou un rôle Keycloak — le claim `sorabel_profile` reste grossier, la granularité est décidée par `mcp/`
+- Ne jamais committer d'identifiants admin Keycloak ou de secrets client OAuth en clair dans `docker-compose.yml` (cf. `scripts/bootstrap-secrets.sh`)
+- Ne jamais exposer la console / les endpoints d'administration Keycloak publiquement ; limiter l'accès au réseau privé/VPN et n'exposer via `api-gateway` que les endpoints OIDC nécessaires
 
 ## Fallback
 - Si une demande porte sur la matrice d'accès fine (tool × collection × table) → rediriger vers `mcp/`, ne pas l'implémenter ici
 - Si un rôle/claim non prévu (`role-support`/`role-sales`/`role-dev`) est demandé → ne pas créer de rôle ad hoc, faire confirmer le profil métier avant modification du realm
+- Si une demande implique de coder une logique métier ici (endpoint custom, service applicatif) → refuser et rediriger vers `mcp/` ou `api-gateway/` : ce projet reste de la configuration pure
+
+## Critères de succès
+- `docker compose up` démarre le realm `sorabel-data-gate` sans erreur
+- L'endpoint JWKS (`/realms/sorabel-data-gate/protocol/openid-connect/certs`) répond
+- L'export `realm-export/sorabel-data-gate.json` reflète l'état réel du realm (pas de dérive)
 
 ## Règles locales
-@.claude/settings.json (permissions/config docker uniquement)
+`.claude/settings.json` — permissions/config docker uniquement (pas une règle : fichier de configuration, non chargé comme contexte)
