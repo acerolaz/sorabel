@@ -19,7 +19,12 @@ kc config credentials --server http://localhost:8080 --realm master \
 # Résolution par clientId plutôt que par id UUID en dur : reste correct même si
 # l'export venait à faire évoluer les id fixes des clients (cf. spec §5.3).
 bot_client_uuid=$(kc get clients -r sorabel-data-gate -q clientId=bot-slack-support --fields id \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+  | python3 -c 'import json,sys
+clients = json.load(sys.stdin)
+if not clients:
+    print("ÉCHEC : client bot-slack-support introuvable (realm sorabel-data-gate importé ?)", file=sys.stderr)
+    raise SystemExit(1)
+print(clients[0]["id"])')
 kc update "clients/${bot_client_uuid}" -r sorabel-data-gate \
   -s "secret=$SORABEL_IDP_BOT_CLIENT_SECRET"
 
