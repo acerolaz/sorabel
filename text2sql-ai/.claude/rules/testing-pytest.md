@@ -16,6 +16,7 @@ projet** (`cd text2sql-ai`), jamais depuis la racine (cf. `../CLAUDE.md`
 tests/
 ├── unit/          # niveau 1 — domaine, use cases, garde-fous : ports doublés
 ├── contract/       # niveau 3 — l'app FastAPI en mémoire (httpx.ASGITransport)
+├── acceptance/     # niveau 4 — vide : voir tests/acceptance/README.md
 ├── eval/           # hors pyramide — golden dataset + `run_eval.py`
 └── conftest.py     # fixtures partagées
 ```
@@ -52,15 +53,31 @@ python -m tests.eval.run_eval
 
 ## Niveaux absents
 
-**Niveau 2 (intégration technique) et niveau 4 (acceptance / E2E) n'existent pas
-dans ce projet.** Aucun adapter n'est aujourd'hui exercé contre sa vraie
-dépendance ou un double fidèle (`httpx.MockTransport`, WireMock), et le Makefile
-n'a pas de cible `test-e2e` — alors que `text2sql-ai` a, lui, un Dockerfile
-propre (cf. `../.claude/rules/makefile-conventions.md`, § « Exception —
-`text2sql-ai` ») et pourrait donc porter un vrai niveau 4.
+**Niveau 2 (intégration technique) : absent.** Aucun adapter n'est aujourd'hui
+exercé contre sa vraie dépendance ou un double fidèle (`httpx.MockTransport`,
+WireMock).
 
-Absence signalée, pas compensée : ne pas gonfler `unit/` ou `contract/` pour
+**Niveau 4 (acceptance / E2E) : câblé mais vide.** La cible `make test-e2e`
+existe et construit l'image puis démarre le conteneur — `text2sql-ai` a son
+propre Dockerfile (cf. `../.claude/rules/makefile-conventions.md`, § « Exception
+— `text2sql-ai` »), c'est donc le projet Python le mieux placé pour porter un
+vrai niveau 4. Mais `tests/acceptance/` ne contient aucun scénario. Détail et
+question ouverte (Azure OpenAI) : `tests/acceptance/README.md`.
+
+Absences signalées, pas compensées : ne pas gonfler `unit/` ou `contract/` pour
 faire nombre.
+## Les deux cibles
+
+| Cible | Contenu |
+|---|---|
+| `make test` | niveaux 1 à 3 — `pytest --ignore=tests/acceptance`, sans Docker |
+| `make test-e2e` | niveau 4 seul — démarre les dépendances réelles, puis les arrête |
+
+`make test-e2e` **échoue tant que `tests/acceptance/` ne contient aucun test**,
+avec un message qui renvoie à `tests/acceptance/README.md`. C'est délibéré : une
+cible verte qui n'exécute rien affirmerait une garantie inexistante. La garde
+s'exécute avant tout démarrage de conteneur.
+
 
 ## Convention AAA
 
