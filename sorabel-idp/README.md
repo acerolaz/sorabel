@@ -111,10 +111,11 @@ Pas de `Makefile`, pas de `make build`/`make test` : le cycle de vie est intégr
 piloté par `docker compose` (image officielle, aucun build custom).
 
 La base est **éphémère** (`start-dev`, H2 en mémoire, aucun volume de données) : c'est
-délibéré. `realm-export/sorabel-data-gate.json` est ainsi la seule source de vérité du
-realm, et la dérive entre la base et l'export est structurellement impossible. En
-contrepartie, **rien de ce qui est modifié dans la console d'admin ne survit à un
-`docker compose down`** — tout changement doit passer par l'export.
+délibéré. `realm-export/sorabel-data-gate.json` est la source de vérité de la configuration
+**structurelle** du realm (rôles, clients, mappers, utilisateurs) ; les secrets sont appliqués
+après boot via `./scripts/bootstrap-secrets.sh`.
+En contrepartie, **rien de ce qui est modifié dans la console d'admin ne survit à un
+`docker compose down`** — tout changement structurel doit passer par l'export.
 
 Un changement dans l'export ne prend effet qu'au **démarrage** : `docker compose down &&
 docker compose up -d --wait`, pas un simple `restart` — puis rejouer
