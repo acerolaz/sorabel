@@ -16,7 +16,7 @@
       },
       {
         "name": "role-dev",
-        "description": "Profil developpeur (IDE). Ne pilote pas le claim sorabel_profile."
+        "description": "Profil développeur (IDE). Ne pilote pas le claim sorabel_profile."
       }
     ]
   },
