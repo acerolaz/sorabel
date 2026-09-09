@@ -1,57 +1,145 @@
 # text2sql-ai
 
-> Agent Text-to-SQL dédié : **génération seule** d'une requête SQL en lecture seule à
-> partir d'une question en langage naturel et d'un schéma statique commenté filtré par
-> profil. N'exécute jamais de SQL lui-même — l'exécution est déléguée à
-> [`sorabelsql-api`](../sorabelsql-api/README.md).
+Agent Text-to-SQL du **Sorabel Data Gateway**. Traduit une question métier en
+langage naturel en une requête SQL PostgreSQL **lecture seule**. Ne l'exécute
+jamais — l'exécution est la responsabilité exclusive de `sorabelsql-api`.
 
-## 1. Rôle
+> Analogie C# : ce service joue le rôle d'un générateur de requêtes LINQ à
+> partir d'un `DbContext` documenté — il produit la requête, il ne l'exécute
+> jamais lui-même.
 
-`text2sql-ai` reçoit une question en langage naturel + le profil de l'appelant, génère
-une requête SQL candidate, et la retourne telle quelle sans l'exécuter. Cette séparation
-génération/exécution donne un point d'inspection entre l'étape probabiliste (LLM) et
-l'étape gouvernée (chaîne de garde-fous de `sorabelsql-api`).
+## Stack
 
-Ce rôle correspond à l'**Agent Text-to-SQL** cadré dans [`Text2SQL_Sorabel.md`](../docs/architecture/Text2SQL_Sorabel.md)
-(évaluation du schéma, prompt, garde-fous, boucle d'auto-correction), et il est appelé
-exclusivement par le tool MCP `ask_database`, documenté dans [`MCP.md`](../docs/architecture/MCP.md) (§2 et
-§6.3 du catalogue de tools).
-
-## 2. Ce que `text2sql-ai` ne fait pas
-
-- Pas d'exécution SQL — jamais de connexion à PostgreSQL.
-- Pas de garde-fous d'exécution (rôle DB read-only, AST, `LIMIT`, timeout) — portés par
-  [`sorabelsql-api`](../sorabelsql-api/README.md), détaillés au §5 de
-  [`Text2SQL_Sorabel.md`](../docs/architecture/Text2SQL_Sorabel.md).
-
-## 3. Stack technique
-
-- Python, architecture hexagonale (cf. `.claude/rules/python-hexagonal.md` à la racine
-  de la solution)
-- Exposé via une interface **FastAPI**, accessible uniquement via l'API Gateway —
-  jamais appelé directement par un client MCP (cf. glossaire de
-  [`MCP.md`](../docs/architecture/MCP.md), entrée « Agent Text-to-SQL »)
-
-## 4. Exigences servies
-
-E3 (Text-to-SQL lecture seule) — pour la partie génération uniquement ; l'exécution
-gouvernée est portée par `sorabelsql-api`.
-
-## 5. Documents liés
-
-| Document | Contenu |
+| | |
 |---|---|
-| [`Text2SQL_Sorabel.md`](../docs/architecture/Text2SQL_Sorabel.md) | Cadrage complet du module Text-to-SQL (E3, E5) : évaluation du schéma, prompt, garde-fous, auto-correction |
-| [`MCP.md`](../docs/architecture/MCP.md) | Cadrage du serveur MCP Sorabel Data Gateway ; §2 et §6.3 documentent le tool `ask_database`, seul appelant de cet agent |
-| [`sorabelsql-api`](../sorabelsql-api/README.md) | Service d'exécution SQL gouvernée, destinataire du SQL généré ici |
+| Langage | Python |
+| Framework API | FastAPI |
+| Architecture | Hexagonale (domain / ports / adapters) |
+| Parsing SQL | `sqlglot` (dialect `postgres`) |
+| Build/Test | `make build`, `make test`, `make lint` |
+| Déploiement | Docker (`make docker-build`, `make docker-up`) |
+
+## Rôle dans la solution
 
 ```mermaid
 flowchart LR
-    MCP(["Tool MCP<br/>ask_database"]) -->|"via API Gateway"| GW[["🌐 API Gateway<br/>routage seul"]]
-    GW --> A[["🐍 text2sql-ai<br/>FastAPI · génération seule"]]
-    A -->|SQL candidate| B[["🛡️ sorabelsql-api<br/>garde-fous + exécution"]]
+    Client(["Client<br/>bot Slack / IDE / poste de vente"]) -->|"① call_tool"| GW
+    GW["api-gateway<br/>(hub de routage pur, C#)"] --> MCP["mcp<br/>(RBAC + orchestration)"]
+    MCP -.->|"② ask_database<br/>/internal/v1/text2sql"| GW
+    GW -.-> T2S["text2sql-ai<br/>(ce projet)"]
+    T2S -.->|"③ SQL généré + validé AST"| GW
+    GW -.-> MCP
+    MCP -.->|"④ run_sql_query<br/>/internal/v1/sql"| GW
+    GW -.-> SQLAPI["sorabelsql-api<br/>(exécution, C# + PostgreSQL)"]
+
+    classDef here fill:#dbe9f7,stroke:#2f6fa8,stroke-width:2px,color:#1b3c56
+    class T2S here
 ```
 
----
-*Projet en cours de mise en place — voir `../CLAUDE.md` pour le contexte de la solution
-Sorabel et la répartition des responsabilités entre projets.*
+`text2sql-ai` ne parle jamais directement à un client, ni à `mcp`, ni à
+`sorabelsql-api`. **Tout flux, y compris interne, transite par `api-gateway`** :
+il n'existe aucun lien direct `mcp` ↔ `text2sql-ai` (cf. `../CLAUDE.md`,
+§ Anti-patterns). C'est `mcp` qui décide et orchestre, mais chacun de ses appels
+sort par la gateway, sur la route `/internal/v1/text2sql`.
+
+## Comment ça marche
+
+### 1. Schéma statique commenté
+
+Pas de RAG vectoriel (écarté : trop coûteux à monter/maintenir pour < 15
+tables). Un seul fichier source de vérité, chargé une fois au démarrage et
+mis en cache mémoire :
+
+```mermaid
+flowchart LR
+    Src[("schema_context.md<br/>1 bloc par table")] --> Load(["Chargement au démarrage<br/>+ cache mémoire"])
+    Load --> Filter{"Filtrage statique<br/>par profil"}
+    Filter --> Ctx[["Contexte assemblé<br/>schéma + énums + few-shot + règles"]]
+    Q(["Question NL"]) --> LLM
+    Ctx --> LLM(["LLM générateur<br/>+ instruction CRITICAL"])
+    LLM --> SQL(["SQL généré"])
+```
+
+Chaque bloc contient : nom de table, colonnes **commentées** (sémantique
+métier, pas juste le nom), PK/FK, et les **valeurs d'énum réelles** en
+toutes lettres (ex. `status IN ('pending','shipped','delivered','cancelled')`)
+— l'omission des valeurs d'énum est la cause d'erreur la plus fréquente.
+
+> Analogie C# : équivalent d'un `DbContext` documenté avec `[Comment]` sur
+> chaque colonne et des `enum` explicites, chargé une fois comme un singleton.
+
+### 2. Défense en profondeur (barrières 1 à 4, côté génération)
+
+Ce service ne porte que les premières barrières ; l'exécution (barrières 5 à
+7 : guardrail sémantique, `LIMIT`/timeout, réplica) est portée par `mcp` et
+`sorabelsql-api`.
+
+| # | Barrière | Ce qu'elle fait ici |
+|---|---|---|
+| 1 | Instruction système | Le prompt déclare l'agent "lecture seule" — refuse toute demande destructrice avant génération |
+| 2 | Rôle DB | N/A dans ce service (pas de connexion DB — porté par `sorabelsql-api`) |
+| 3 | Blocklist de mots-clés | `INSERT/UPDATE/DELETE/DROP/TRUNCATE/ALTER/CREATE/GRANT/REVOKE`, vérifiés y compris dans les CTE |
+| 4 | Validation AST | `sqlglot.parse(sql, dialect="postgres")` — rejette tout ce qui n'est pas un `SELECT` pur |
+
+Une seule barrière ne suffit jamais : chacune couvre l'angle mort de la
+précédente.
+
+### 3. Filtrage par profil (RBAC)
+
+Le schéma injecté au modèle ne contient **que** les tables/colonnes du
+profil appelant, via un dictionnaire statique `{profil: [tables_autorisées]}`
+— pas de recherche vectorielle. Le modèle ne peut pas halluciner une
+référence à une colonne qu'il n'a jamais vue (ex. Support ne voit jamais
+`purchase_price` ni `margin`).
+
+### 4. Golden Dataset & évaluation
+
+15 à 30 questions de référence (question NL, contexte, SQL cible, résultat
+attendu) dans `tests/eval/golden_dataset.jsonl`, rejouées à chaque changement de
+prompt/schéma/modèle — équivalent d'une suite de tests d'intégration avec
+données de seed connues.
+
+Le rejeu est un **harnais manuel**, pas un niveau de la pyramide de tests : il
+appelle le vrai Azure OpenAI et n'est donc pas branché sur `make test`.
+
+```bash
+python -m tests.eval.run_eval
+```
+
+## Tool MCP servi par ce projet
+
+Ce service est le backend du tool **`ask_database`** — le tool de *génération*.
+Il n'est **pas** derrière `run_sql_query`, qui est le tool d'*exécution*, servi
+par `sorabelsql-api` (cf. `mcp/app/domain/catalog.py`). Confondre les deux
+reviendrait à effacer la séparation génération/exécution exigée par E3.
+
+| Tool MCP | Backend | Paramètres | Ce que fait ce projet |
+|---|---|---|---|
+| `ask_database` | `text2sql` (**ce projet**) | `question: str`, `profile: str` | Schéma filtré par profil → génération SQL → barrières 1‑4 → renvoi du SQL validé à `mcp` |
+| `run_sql_query` | `sqlapi` | `sql: str`, `profile: str` | Rien — l'exécution appartient à `sorabelsql-api` |
+
+## Démarrage
+
+```bash
+make build           # cd .. && pip install -e ".[dev]" (pyproject partagé à la racine)
+make test            # pytest, niveaux 1 à 3, sans Docker
+make test-e2e        # niveau 4 : construit l'image, démarre le conteneur, l'arrête
+make lint            # ruff check .
+make docker-build    # construit l'image
+make docker-up       # démarre le conteneur
+```
+
+`pytest` se lance **depuis ce répertoire**, jamais depuis la racine du dépôt
+(collision du paquet `app` entre projets Python — cf. `../CLAUDE.md` § Commandes).
+
+## Ce que ce projet ne fait pas
+
+- Il n'exécute **jamais** de SQL (→ `sorabelsql-api`)
+- Il ne porte **pas** la matrice RBAC (→ `mcp`)
+- Il n'expose **jamais** le schéma complet, seulement le sous-ensemble filtré par profil
+
+## Documentation liée
+
+- `Text2SQL_Sorabel.md` (racine solution) — pipeline complet, LLMOps, LLM as judge, glossaire
+- `MCP.md` (racine solution) — architecture MCP, RBAC, séparation génération/exécution
+- `CLAUDE.md` (ce dossier) — non-négociables et règles pour Claude Code
