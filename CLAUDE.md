@@ -166,3 +166,13 @@ résolue (pas contournée) avant de merger.
 - `identity-provider` → renommé `sorabel-idp`
 - `authorization-gateway` → renommé `api-gateway` (portée réduite au routage pur)
 - `tools-api` → supprimé, remplacé par `sorabelsql-api`
+
+## graphify
+
+This project uses a graphify knowledge graph (god nodes, community structure, cross-file relationships). It is generated locally (`graphify .`) into graphify-out/ and not versioned — run it once before relying on the rules below.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
