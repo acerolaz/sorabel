@@ -12,16 +12,31 @@ tests/
 ├── integration/    # niveau 2 — infrastructure/, Testcontainers (Postgres+pgvector réel)
 ├── contract/       # niveau 3 — l'app FastAPI en mémoire (httpx.ASGITransport),
 │                   #            adapters doublés : routes, codes, format d'erreur
+├── acceptance/     # niveau 4 — vide : voir tests/acceptance/README.md
 ├── eval/           # hors pyramide — jeu `questions_rag.jsonl` + `run_eval.py`,
 │                   #            outillage de mesure E6 (hybride vs vectoriel simple)
 └── conftest.py     # fixtures partagées
 ```
 
-**Le niveau 4 (acceptance / E2E) n'existe pas dans ce projet.** `tests/contract/`
-monte l'application en mémoire avec ses adapters doublés : rien n'y prouve que le
-service démarre avec sa configuration réelle. Le Makefile n'a d'ailleurs pas de
-cible `test-e2e`. Absence assumée pour l'instant — à signaler, pas à compenser en
-gonflant `contract/`.
+**Le niveau 4 (acceptance / E2E) est câblé mais vide.** La cible `make test-e2e`
+existe et démarre le Postgres/pgvector du `docker compose` de la racine, mais
+`tests/acceptance/` ne contient aucun scénario. `tests/contract/` monte
+l'application en mémoire avec ses adapters doublés : rien n'y prouve que le
+service démarre avec sa configuration réelle. Détail et prérequis :
+`tests/acceptance/README.md`. À signaler, pas à compenser en gonflant
+`contract/`.
+## Les deux cibles
+
+| Cible | Contenu |
+|---|---|
+| `make test` | niveaux 1 à 3 — `pytest --ignore=tests/acceptance`, sans Docker |
+| `make test-e2e` | niveau 4 seul — démarre les dépendances réelles, puis les arrête |
+
+`make test-e2e` **échoue tant que `tests/acceptance/` ne contient aucun test**,
+avec un message qui renvoie à `tests/acceptance/README.md`. C'est délibéré : une
+cible verte qui n'exécute rien affirmerait une garantie inexistante. La garde
+s'exécute avant tout démarrage de conteneur.
+
 
 > Le fichier `contract/test_flow_complet.py` s'appelait `test_acceptance_flow.py` :
 > le nom promettait une garantie de niveau 4 que ce test, entièrement en mémoire,
