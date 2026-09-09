@@ -16,16 +16,32 @@ tests/
 ├── unit/          # niveau 1 — domaine, use cases, adapters : ports/réseau doublés
 ├── integration/    # niveau 2 — adapters contre une dépendance réellement exercée
 ├── contract/       # niveau 3 — serveur assemblé en mémoire, backends doublés
+├── acceptance/     # niveau 4 — vide : voir tests/acceptance/README.md
 └── harness.py      # doublures partagées entre niveaux (hors pyramide)
 ```
 
-**Le niveau 4 (acceptance / E2E) n'existe pas dans ce projet** et son absence est
-assumée pour l'instant : `mcp` n'a pas de Dockerfile propre (cf.
+**Le niveau 4 (acceptance / E2E) est câblé mais vide.** La cible `make test-e2e`
+existe et démarre le `docker compose` de la racine, mais `tests/acceptance/` ne
+contient aucun scénario : `mcp` n'a pas de Dockerfile propre (cf.
 `../.claude/rules/makefile-conventions.md`, § « Exception — outillage Python
-partagé ») et son Makefile n'a pas de cible `test-e2e`. Rien de ce qui suit ne
-prouve donc que le service démarre avec sa configuration réelle. Ne pas combler
-ce trou en gonflant `contract/` : un scénario qui ne démarre pas le service tel
-qu'il sera déployé reste un test de niveau 3.
+partagé ») et le compose racine ne déclare pas encore ses vraies dépendances.
+Rien de ce qui suit ne prouve donc que le service démarre avec sa configuration
+réelle. Détail et prérequis : `tests/acceptance/README.md`.
+
+Ne pas combler ce trou en gonflant `contract/` : un scénario qui ne démarre pas
+le service tel qu'il sera déployé reste un test de niveau 3.
+## Les deux cibles
+
+| Cible | Contenu |
+|---|---|
+| `make test` | niveaux 1 à 3 — `pytest --ignore=tests/acceptance`, sans Docker |
+| `make test-e2e` | niveau 4 seul — démarre les dépendances réelles, puis les arrête |
+
+`make test-e2e` **échoue tant que `tests/acceptance/` ne contient aucun test**,
+avec un message qui renvoie à `tests/acceptance/README.md`. C'est délibéré : une
+cible verte qui n'exécute rien affirmerait une garantie inexistante. La garde
+s'exécute avant tout démarrage de conteneur.
+
 
 ## `tests/unit/`
 
